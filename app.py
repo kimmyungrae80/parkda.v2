@@ -8,12 +8,12 @@ import random
 import urllib.parse
 import requests
 from PIL import Image
-from datetime import datetime # 👈 이 줄이 빠져서 에러가 났던 겁니다!
+from datetime import datetime
 
 # 1. 페이지 설정
 st.set_page_config(page_title="PARKDA 파크골프 통합관제플랫폼", layout="wide")
 
-# 구글 시트 웹 앱 URL (박사님 주소)
+# 구글 시트 웹 앱 URL
 DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxxa5VMQJXNKrxuuEZsqRQGzy7qBlDu9_M-Q2BlQhNs69LRYRERescREiI-sjCnOPz5/exec"
 
 if 'logged_in' not in st.session_state:
@@ -21,7 +21,7 @@ if 'logged_in' not in st.session_state:
 if 'user_info' not in st.session_state:
     st.session_state.user_info = None
 
-# 2. 로고 로드 (파일명 이원화)
+# 2. 로고 로드
 def load_logo(file_name):
     if os.path.exists(file_name):
         return Image.open(file_name)
@@ -30,7 +30,7 @@ def load_logo(file_name):
 logo_wide = load_logo("logo가로.png")
 logo_sq = load_logo("logo.png")
 
-# 3. 유틸리티 함수 (날씨 및 데이터 로드)
+# 3. 유틸리티 함수
 def get_weather(lat, lon):
     try:
         temp = random.randint(18, 26)
@@ -49,14 +49,15 @@ def load_park_data():
             'name': next((c for c in cols if any(x in str(c) for x in ['구장', '이름', '명칭'])), None),
             'addr': next((c for c in cols if any(x in str(c) for x in ['주소', '위치'])), None),
             'lat': next((c for c in cols if any(x in str(c).lower() for x in ['위도', 'lat'])), None),
-            'lon': next((c for c in cols if any(x in str(c).lower() for x in ['경도', 'lng', 'lon'])), None)
+            'lon': next((c for c in cols if any(x in str(c).lower() for x in ['경도', 'lng', 'lon'])), None),
+            'hole': next((c for c in cols if any(x in str(c) for x in ['홀', 'hole'])), None)
         }
         return df, mapping
     except: return None, None
 
 df, col_map = load_park_data()
 
-# 4. 뉴스 수집 및 중복 제거
+# 4. 뉴스 수집 엔진
 def get_clean_news(query):
     try:
         safe_query = urllib.parse.quote(f"{query} 네이버뉴스")
@@ -82,7 +83,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 6. 사이드바 (인증 및 DB저장)
+# 6. 사이드바
 with st.sidebar:
     if not st.session_state.logged_in:
         if logo_wide: st.image(logo_wide, use_container_width=True)
@@ -91,8 +92,8 @@ with st.sidebar:
         u_phone = st.text_input("휴대폰 번호", placeholder="01012345678")
         if st.button("🚀 인증 및 시작"):
             if u_name and len(u_phone) >= 10:
-                user_data = {"name": u_name, "phone": u_phone, "points": 1000}
-                try: requests.post(DEPLOY_URL, json=user_data)
+                user_data = {"type": "JOIN", "name": u_name, "phone": u_phone, "points": 1000}
+                try: requests.post(DEPLOY_URL, json=user_data, timeout=5)
                 except: pass
                 st.session_state.logged_in = True
                 st.session_state.user_info = user_data
@@ -100,14 +101,15 @@ with st.sidebar:
     else:
         if logo_sq: st.image(logo_sq, width=150)
         st.success(f"✅ {st.session_state.user_info['name']}님 접속 중")
-        st.metric("💰 보유 포인트", f"{st.session_state.user_info['points']} P")
+        st.metric("💰 보유 포인트", "1,000 P")
         if st.button("로그아웃"):
             st.session_state.logged_in = False
             st.rerun()
 
     st.divider()
     st.subheader("📰 실시간 뉴스")
-    for n in get_clean_news("파크골프")[:5]:
+    news_items = get_clean_news("파크골프")
+    for n in news_items[:5]:
         st.markdown(f"• <a href='{n.link}' target='_blank' style='font-size:13px;'>{n.title}</a>", unsafe_allow_html=True)
 
 # 7. 메인 화면
@@ -117,7 +119,7 @@ if st.session_state.logged_in:
     tab1, tab2, tab3 = st.tabs(["🏆 실시간 대회 정보", "📍 전국 구장 & 날씨", "🤖 AI 지능형 조 편성"])
     
     with tab1:
-        st.subheader("🏁 전국 대회 공고 (중복 제거 & 최신순)")
+        st.subheader("🏁 전국 대회 공고")
         contests = get_clean_news("파크골프 대회 공고")
         for entry in contests:
             st.markdown(f"""
@@ -129,8 +131,9 @@ if st.session_state.logged_in:
 
     with tab2:
         st.subheader("📍 전국 구장 실시간 날씨 관제")
-        m = folium.Map(location=[36.5, 127.5], zoom_start=7, tiles="cartodbpositron")
-        if df is not None and col_map['lat']:
+        # 데이터가 없을 경우를 대비한 안전 장치
+        if df is not None and not df.empty:
+            m = folium.Map(location=[36.5, 127.5], zoom_start=7, tiles="cartodbpositron")
             for _, row in df.iterrows():
                 try:
                     lat, lon = float(row[col_map['lat']]), float(row[col_map['lon']])
@@ -139,8 +142,8 @@ if st.session_state.logged_in:
                     folium.Marker([lat, lon], popup=folium.Popup(p_html, max_width=250)).add_to(m)
                 except: continue
             folium_static(m, width=900, height=550)
-
-# ... 상단 import 부분 생략 (datetime, requests 필수 포함) ...
+        else:
+            st.error("구장 데이터를 불러올 수 없습니다. park_data.xlsx 파일을 확인해주세요.")
 
     with tab3:
         st.subheader("🤖 AI 지능형 조 편성 시스템")
@@ -150,18 +153,16 @@ if st.session_state.logged_in:
             names = [n.strip() for n in raw.replace(',', ' ').split() if n.strip()]
             if names:
                 random.shuffle(names)
-                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S') # 실시간 날짜/시간
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 
                 kakao_msg = f"⛳ [PARKDA 조 편성 결과]\n"
                 kakao_msg += f"📅 일시: {now_str}\n"
                 kakao_msg += "----------------------------\n"
                 
-                match_log = "" # DB 저장용 텍스트
-                
+                match_log = ""
                 for i in range(0, len(names), 4):
                     group = names[i:i+4]
-                    # 조 이름에서 'AI' 제거 (박사님 요청)
-                    line = f"{i//4 + 1}조: {', '.join(group)}"
+                    line = f"{i//4 + 1}조: {', '.join(group)}" # 'AI' 문구 삭제
                     st.markdown(f'<div class="team-box">{line}</div>', unsafe_allow_html=True)
                     kakao_msg += line + "\n"
                     match_log += line + " | "
@@ -169,18 +170,17 @@ if st.session_state.logged_in:
                 kakao_msg += "----------------------------\n"
                 kakao_msg += "공정하게 편성되었습니다. 즐거운 라운딩 되세요! ⛳"
 
-                # [데이터 자산화] 구글 시트로 조편성 결과 전송
+                # 구글 시트로 조 편성 결과 전송
                 match_data = {
                     "type": "MATCH",
-                    "organizer": st.session_state.user_info['name'], # 누가 짰는지 기록
+                    "organizer": st.session_state.user_info['name'],
                     "match_result": match_log
                 }
-                try:
-                    requests.post(DEPLOY_URL, json=match_data)
+                try: requests.post(DEPLOY_URL, json=match_data, timeout=5)
                 except: pass
 
                 st.divider()
-                st.success(f"✅ 조 편성이 완료되었고, 데이터가 기록되었습니다! ({now_str})")
-                st.text_area("📋 카톡방 전달용 (복사해서 사용하세요)", kakao_msg, height=180)
-            else:
-                st.error("명단을 입력해 주세요.")
+                st.success(f"✅ 조 편성이 완료되었습니다! (기록 시간: {now_str})")
+                st.text_area("📋 카톡방 전달용", kakao_msg, height=180)
+else:
+    st.warning("🔒 사이드바에서 실명 인증 후 전체 기능을 이용하세요.")
