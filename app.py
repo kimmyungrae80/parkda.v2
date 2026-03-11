@@ -8,11 +8,12 @@ import random
 import urllib.parse
 import requests
 from PIL import Image
+from datetime import datetime # 👈 이 줄이 빠져서 에러가 났던 겁니다!
 
-# 1. 페이지 설정 및 제목 (박사님 요청 반영)
+# 1. 페이지 설정
 st.set_page_config(page_title="PARKDA 파크골프 통합관제플랫폼", layout="wide")
 
-# 구글 시트 웹 앱 URL (박사님이 주신 주소 반영)
+# 구글 시트 웹 앱 URL (박사님 주소)
 DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxxa5VMQJXNKrxuuEZsqRQGzy7qBlDu9_M-Q2BlQhNs69LRYRERescREiI-sjCnOPz5/exec"
 
 if 'logged_in' not in st.session_state:
@@ -20,7 +21,7 @@ if 'logged_in' not in st.session_state:
 if 'user_info' not in st.session_state:
     st.session_state.user_info = None
 
-# 2. 로고 로드 (로그인 전/후 이원화)
+# 2. 로고 로드 (파일명 이원화)
 def load_logo(file_name):
     if os.path.exists(file_name):
         return Image.open(file_name)
@@ -55,7 +56,7 @@ def load_park_data():
 
 df, col_map = load_park_data()
 
-# 4. 뉴스 수집 및 중복 제거 (URL 인코딩 보강)
+# 4. 뉴스 수집 및 중복 제거
 def get_clean_news(query):
     try:
         safe_query = urllib.parse.quote(f"{query} 네이버뉴스")
@@ -77,31 +78,25 @@ st.markdown("""
     <style>
     .stImage > img { margin-bottom: 20px; border-radius: 5px; }
     .contest-card { padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 5px solid #FFD700; margin-bottom: 10px; }
-    .team-box { padding: 10px; background-color: #262730; border-radius: 8px; border-left: 5px solid #2E7D32; margin-bottom: 8px; }
+    .team-box { padding: 12px; background-color: #262730; border-radius: 8px; border-left: 5px solid #2E7D32; margin-bottom: 8px; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-# 6. 사이드바 (로고/인증/DB저장)
+# 6. 사이드바 (인증 및 DB저장)
 with st.sidebar:
     if not st.session_state.logged_in:
         if logo_wide: st.image(logo_wide, use_container_width=True)
         st.subheader("👤 멤버십 인증")
         u_name = st.text_input("성함", placeholder="홍길동")
         u_phone = st.text_input("휴대폰 번호", placeholder="01012345678")
-        
         if st.button("🚀 인증 및 시작"):
             if u_name and len(u_phone) >= 10:
                 user_data = {"name": u_name, "phone": u_phone, "points": 1000}
-                try:
-                    # [핵심] 구글 시트로 데이터 즉시 전송
-                    requests.post(DEPLOY_URL, json=user_data)
-                except: pass # 저장 에러나도 로그인은 진행
-                
+                try: requests.post(DEPLOY_URL, json=user_data)
+                except: pass
                 st.session_state.logged_in = True
                 st.session_state.user_info = user_data
                 st.rerun()
-            else:
-                st.error("성함과 연락처를 정확히 입력해 주세요.")
     else:
         if logo_sq: st.image(logo_sq, width=150)
         st.success(f"✅ {st.session_state.user_info['name']}님 접속 중")
@@ -111,7 +106,7 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    st.subheader("📰 실시간 파크골프 뉴스")
+    st.subheader("📰 실시간 뉴스")
     for n in get_clean_news("파크골프")[:5]:
         st.markdown(f"• <a href='{n.link}' target='_blank' style='font-size:13px;'>{n.title}</a>", unsafe_allow_html=True)
 
@@ -147,24 +142,16 @@ if st.session_state.logged_in:
 
     with tab3:
         st.subheader("🤖 AI 지능형 조 편성 시스템")
-        st.write("카카오톡 공지에서 복사한 명단을 아래에 붙여넣으세요.")
-        
-        # 명단 입력창
-        raw = st.text_area("명단 입력 (이름 사이 공백 또는 줄바꿈)", "김명래 박지성 손흥민 이강인 조규성 황희찬", height=150)
+        raw = st.text_area("명단 입력 (이름 사이 공백)", "김명래 박지성 손흥민 이강인 조규성 황희찬", height=150)
         
         if st.button("🚀 AI 조 편성 실행"):
-            # 입력된 명단 정리
             names = [n.strip() for n in raw.replace(',', ' ').split() if n.strip()]
-            
             if names:
-                random.shuffle(names) # 랜덤 섞기
-                
-                # 카톡 복사용 텍스트 생성 시작
+                random.shuffle(names)
                 kakao_msg = f"⛳ [PARKDA AI 조 편성 결과]\n"
                 kakao_msg += f"📅 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
                 kakao_msg += "----------------------------\n"
                 
-                # 조별 출력 및 메시지 누적
                 for i in range(0, len(names), 4):
                     group = names[i:i+4]
                     line = f"🤖 AI {i//4 + 1}조: {', '.join(group)}"
@@ -174,9 +161,10 @@ if st.session_state.logged_in:
                 kakao_msg += "----------------------------\n"
                 kakao_msg += "공정하게 편성되었습니다. 즐거운 라운딩 되세요! ⛳"
 
-                # [핵심] 카톡 복사용 텍스트 박스 추가
                 st.divider()
-                st.success("✅ 조 편성이 완료되었습니다! 아래 내용을 꾹 눌러 복사해서 카톡방에 올리세요.")
-                st.text_area("📋 카톡방 전달용 (전체 복사하세요)", kakao_msg, height=200)
+                st.success("✅ 조 편성이 완료되었습니다! 아래 내용을 복사해서 카톡방에 올리세요.")
+                st.text_area("📋 카톡방 전달용", kakao_msg, height=180)
             else:
                 st.error("명단을 입력해 주세요.")
+else:
+    st.warning("🔒 사이드바에서 실명 인증 후 전체 기능을 이용하세요.")
