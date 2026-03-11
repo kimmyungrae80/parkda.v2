@@ -7,7 +7,6 @@ import os
 import random
 import requests
 from PIL import Image
-from datetime import datetime
 
 # 1. 페이지 설정
 st.set_page_config(page_title="PARKDA | 파크골프 통합플랫폼", layout="wide")
@@ -18,17 +17,17 @@ if 'logged_in' not in st.session_state:
 if 'user_info' not in st.session_state:
     st.session_state.user_info = None
 
-# 2. 로고 로드 (경로 및 오류 해결)
+# 2. 로고 로드 (박사님의 파일명 'logo가로.png'에 맞춰 수정함)
 def load_logo():
-    # 파일명이 소문자 'logo.png'인지 꼭 확인하세요!
-    logo_path = "logo.png" 
+    # VS Code 목록에 있는 파일명과 정확히 일치해야 합니다.
+    logo_path = "logo가로.png" 
     if os.path.exists(logo_path):
         return Image.open(logo_path)
     return None
 
 logo_img = load_logo()
 
-# 3. 날씨 함수 (기존 보존)
+# 3. 날씨 정보 (시뮬레이션)
 def get_weather(lat, lon):
     try:
         temp = random.randint(18, 26)
@@ -36,7 +35,7 @@ def get_weather(lat, lon):
         return f"🌡️ {temp}°C | {status}"
     except: return "날씨 정보 로딩 실패"
 
-# 4. 데이터 로드 (기존 보존)
+# 4. 데이터 로드 (park_data.xlsx 보존)
 @st.cache_data
 def load_park_data():
     file_name = "park_data.xlsx"
@@ -56,10 +55,9 @@ def load_park_data():
 
 df, col_map = load_park_data()
 
-# 5. 뉴스 및 대회 정보 통합 (중복 제거 & 네이버/구글 검색 최적화)
+# 5. 뉴스 중복 제거 및 최신순 정렬 엔진 (네이버/구글 검색 최적화)
 def get_clean_news(query):
-    # 구글 뉴스 RSS는 네이버 뉴스 출처까지 포함합니다. 
-    # 검색어에 '네이버뉴스'를 추가하여 데이터 범위를 넓힙니다.
+    # 구글 뉴스를 통해 네이버 소식까지 포함하여 검색
     rss_url = f"https://news.google.com/rss/search?q={query}+네이버뉴스&hl=ko&gl=KR&ceid=KR:ko"
     feed = feedparser.parse(rss_url)
     
@@ -67,31 +65,31 @@ def get_clean_news(query):
     unique_entries = []
     
     for entry in feed.entries:
-        # 1. 제목 앞 12자리가 같으면 중복으로 간주 (보람그룹배... 중복 해결)
+        # 제목 앞 12자리가 같으면 중복으로 간주하여 필터링
         title_key = entry.title[:12].replace(" ", "")
         if title_key not in seen_titles:
             seen_titles.add(title_key)
             unique_entries.append(entry)
             
-    # 2. 발행 날짜순 정렬 (최신순)
+    # 최신 날짜순으로 정렬
     unique_entries.sort(key=lambda x: getattr(x, 'published_parsed', 0), reverse=True)
     return unique_entries[:10]
 
 # 6. 스타일 설정
 st.markdown("""
     <style>
-    .stImage > img { border-radius: 10px; margin-bottom: 20px; }
+    .stImage > img { margin-bottom: 20px; }
     .contest-card { padding: 15px; background: #1e1e1e; border-radius: 10px; border-left: 5px solid #FFD700; margin-bottom: 10px; }
     .team-box { padding: 10px; background-color: #262730; border-radius: 8px; border-left: 5px solid #2E7D32; margin-bottom: 8px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 7. 사이드바 (로고 출력 보강)
+# 7. 사이드바 (로고 + 인증 + 실시간 뉴스)
 with st.sidebar:
     if logo_img:
         st.image(logo_img, use_container_width=True)
     else:
-        st.error("⚠️ logo.png 파일이 없습니다.")
+        st.error("⚠️ 'logo가로.png' 파일을 찾을 수 없습니다.")
     
     st.divider()
     if not st.session_state.logged_in:
@@ -104,14 +102,14 @@ with st.sidebar:
                 st.session_state.user_info = {"name": u_name, "phone": u_phone, "points": 1000}
                 st.rerun()
     else:
-        st.success(f"✅ {st.session_state.user_info['name']}님")
+        st.success(f"✅ {st.session_state.user_info['name']}님 접속 중")
         st.metric("💰 포인트", f"{st.session_state.user_info['points']} P")
         if st.button("로그아웃"):
             st.session_state.logged_in = False
             st.rerun()
 
     st.divider()
-    st.subheader("📰 실시간 뉴스")
+    st.subheader("📰 실시간 파크골프 뉴스")
     news = get_clean_news("파크골프")
     for n in news[:5]:
         st.markdown(f"• <a href='{n.link}' target='_blank' style='font-size:13px;'>{n.title}</a>", unsafe_allow_html=True)
@@ -148,11 +146,12 @@ if st.session_state.logged_in:
 
     with tab3:
         st.subheader("👥 지능형 랜덤 조 편성")
-        raw = st.text_area("명단 입력", "회원1 회원2 회원3 회원4", height=150)
+        raw = st.text_area("명단 입력 (공백 구분)", "회원1 회원2 회원3 회원4", height=150)
         if st.button("🚀 조 편성 실행"):
             names = [n.strip() for n in raw.replace(',', ' ').split() if n.strip()]
-            random.shuffle(names)
-            for i in range(0, len(names), 4):
-                st.markdown(f'<div class="team-box">{i//4 + 1}조: {", ".join(names[i:i+4])}</div>', unsafe_allow_html=True)
+            if names:
+                random.shuffle(names)
+                for i in range(0, len(names), 4):
+                    st.markdown(f'<div class="team-box">{i//4 + 1}조: {", ".join(names[i:i+4])}</div>', unsafe_allow_html=True)
 else:
     st.warning("🔒 사이드바에서 실명 인증 후 전체 기능을 이용하세요.")
