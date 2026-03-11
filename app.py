@@ -15,16 +15,25 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 1. 데이터 로드 (에러 방지 로직 추가)
+# 1. 데이터 로드 (컬럼명 자동 매칭 로직 추가)
 @st.cache_data
 def load_data():
-    file_name = "경기장_정보.xlsx"
+    file_name = "park_data.xlsx"
     if os.path.exists(file_name):
-        return pd.read_excel(file_name)
-    else:
-        return None
+        df = pd.read_excel(file_name)
+        # 컬럼명 자동 매칭 (사용자가 '구장이름'이라 썼든 '구장명'이라 썼든 찾아냄)
+        cols = df.columns
+        mapping = {
+            'name': [c for c in cols if '구장' in c or '이름' in c or '명칭' in c][0],
+            'addr': [c for c in cols if '주소' in c or '위치' in c][0],
+            'lat': [c for c in cols if '위도' in c or 'lat' in c.lower()][0],
+            'lon': [c for c in cols if '경도' in c or 'lng' in c.lower() or 'lon' in c.lower()][0],
+            'hole': [c for c in cols if '홀' in c or 'hole' in c.lower()][0]
+        }
+        return df, mapping
+    return None, None
 
-df = pd.read_excel("park_data.xlsx")
+df, col_map = load_data()
 
 # --- 사이드바: 실시간 뉴스 ---
 st.sidebar.title("📰 실시간 파크골프 뉴스")
@@ -53,21 +62,26 @@ with col1:
     if df is not None:
         m = folium.Map(location=[36.5, 127.5], zoom_start=7, tiles="cartodbpositron")
         for _, row in df.iterrows():
-            popup_html = f"<b>{row['구장명']}</b><br>{row['주소']}<br>{row['홀수']}홀"
+            # 매칭된 컬럼명으로 데이터 추출
+            name = row[col_map['name']]
+            addr = row[col_map['addr']]
+            hole = row[col_map['hole']]
+            lat = row[col_map['lat']]
+            lon = row[col_map['lon']]
+            
+            popup_html = f"<b>{name}</b><br>{addr}<br>{hole}홀"
             folium.Marker(
-                location=[row['위도'], row['경도']],
+                location=[lat, lon],
                 popup=folium.Popup(popup_html, max_width=250),
-                tooltip=row['구장명']
+                tooltip=name
             ).add_to(m)
         folium_static(m, width=800, height=500)
     else:
-        st.error("⚠️ '경기장_정보.xlsx' 파일을 찾을 수 없습니다. GitHub 창고에 파일이 있는지 확인해 주세요.")
-        st.info("💡 팁: 파일명이 정확히 '경기장_정보.xlsx'인지(공백 주의) 확인해 보세요.")
+        st.error("⚠️ 'park_data.xlsx' 파일을 찾을 수 없습니다.")
 
 with col2:
     st.subheader("📊 데이터 통계")
     if df is not None:
         st.metric("총 등록 구장", f"{len(df)}개")
-    else:
-        st.metric("총 등록 구장", "데이터 없음")
     st.metric("운영 상태", "정상 (Open-Loop)")
+    st.info("💡 마커를 클릭하면 구장 상세 정보가 나타납니다.")
