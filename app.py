@@ -183,7 +183,7 @@ if st.session_state.logged_in:
     with m_col2:
         if st.button("📍 전국지도"): st.session_state.menu_select = "전국지도"
     with m_col3:
-        if st.button("👥 조편성"): st.session_state.menu_select = "조편성"
+        if st.button("👥 AI 지능형 조편성"): st.session_state.menu_select = "조편성"
 
     st.divider()
 
@@ -212,7 +212,7 @@ if st.session_state.logged_in:
                 except: continue
             folium_static(m, width=1000, height=600)
 
-    elif st.session_state.menu_select == "조편성":
+    elif st.session_state.menu_select == "AI 지능형 조편성":
         st.markdown("<p class='guide-text'>💡 엑셀/한글 명단을 붙여넣으세요. 조 편성과 동시에 구글 시트에 기록됩니다.</p>", unsafe_allow_html=True)
         raw = st.text_area("회원 명단 입력", placeholder="명단을 이곳에 붙여넣으세요.", height=200)
         
