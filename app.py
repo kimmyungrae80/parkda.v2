@@ -24,7 +24,7 @@ def load_data():
     else:
         return None
 
-df = load_data()
+df = pd.read_excel("park_data.xlsx")
 
 # --- 사이드바: 실시간 뉴스 ---
 st.sidebar.title("📰 실시간 파크골프 뉴스")
