@@ -147,12 +147,36 @@ if st.session_state.logged_in:
 
     with tab3:
         st.subheader("🤖 AI 지능형 조 편성 시스템")
-        raw = st.text_area("명단 입력 (이름 사이 공백)", "김명래 박지성 손흥민 이강인 조규성 황희찬", height=150)
+        st.write("카카오톡 공지에서 복사한 명단을 아래에 붙여넣으세요.")
+        
+        # 명단 입력창
+        raw = st.text_area("명단 입력 (이름 사이 공백 또는 줄바꿈)", "김명래 박지성 손흥민 이강인 조규성 황희찬", height=150)
+        
         if st.button("🚀 AI 조 편성 실행"):
+            # 입력된 명단 정리
             names = [n.strip() for n in raw.replace(',', ' ').split() if n.strip()]
+            
             if names:
-                random.shuffle(names)
+                random.shuffle(names) # 랜덤 섞기
+                
+                # 카톡 복사용 텍스트 생성 시작
+                kakao_msg = f"⛳ [PARKDA AI 조 편성 결과]\n"
+                kakao_msg += f"📅 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+                kakao_msg += "----------------------------\n"
+                
+                # 조별 출력 및 메시지 누적
                 for i in range(0, len(names), 4):
-                    st.markdown(f'<div class="team-box">🤖 AI {i//4 + 1}조: {", ".join(names[i:i+4])}</div>', unsafe_allow_html=True)
-else:
-    st.warning("🔒 사이드바에서 실명 인증 후 전체 기능을 이용하세요.")
+                    group = names[i:i+4]
+                    line = f"🤖 AI {i//4 + 1}조: {', '.join(group)}"
+                    st.markdown(f'<div class="team-box">{line}</div>', unsafe_allow_html=True)
+                    kakao_msg += line + "\n"
+                
+                kakao_msg += "----------------------------\n"
+                kakao_msg += "공정하게 편성되었습니다. 즐거운 라운딩 되세요! ⛳"
+
+                # [핵심] 카톡 복사용 텍스트 박스 추가
+                st.divider()
+                st.success("✅ 조 편성이 완료되었습니다! 아래 내용을 꾹 눌러 복사해서 카톡방에 올리세요.")
+                st.text_area("📋 카톡방 전달용 (전체 복사하세요)", kakao_msg, height=200)
+            else:
+                st.error("명단을 입력해 주세요.")
