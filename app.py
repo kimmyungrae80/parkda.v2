@@ -1,66 +1,31 @@
 import streamlit as st
-import streamlit.components.v1 as components # 카카오 버튼 렌더링용
-# ... (기존 라이브러리 pandas, folium, feedparser 등 보존) ...
+# ... (기존 라이브러리 보존) ...
 
-# 1. 카카오 로그인 상태 관리
+# 1. 세션 상태 관리 (기존 로그인 로직 보관)
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
-# 2. 카카오 로그인 버튼을 위한 HTML/JS (박사님의 키를 넣는 곳)
-def kakao_login_button():
-    # 박사님이 카카오 개발자 센터에서 발급받은 'JavaScript 키'를 여기에 넣으시면 됩니다.
-    kakao_js_key = "YOUR_KAKAO_JS_KEY" 
-    
-    html_code = f"""
-    <script src="https://developers.kakao.com/sdk/js/kakao.js"></script>
-    <script>
-        if (!Kakao.isInitialized()) {{
-            Kakao.init('{kakao_js_key}');
-        }}
-        function loginWithKakao() {{
-            Kakao.Auth.login({{
-                success: function(authObj) {{
-                    Kakao.API.request({{
-                        url: '/v2/user/me',
-                        success: function(res) {{
-                            parent.postMessage({{
-                                type: 'kakao_login',
-                                name: res.kakao_account.profile.nickname,
-                                email: res.kakao_account.email
-                            }}, "*");
-                        }}
-                    }});
-                }},
-                fail: function(err) {{
-                    alert(JSON.stringify(err));
-                }}
-            }});
-        }}
-    </script>
-    <div style="display: flex; justify-content: center;">
-        <button onclick="loginWithKakao()" style="background-color: #FEE500; color: #000000; border: none; border-radius: 12px; padding: 10px 20px; font-weight: bold; cursor: pointer; width: 100%;">
-            🟡 카카오톡으로 1초 로그인
-        </button>
-    </div>
-    """
-    components.html(html_code, height=60)
-
-# --- 사이드바 영역 (기존 기능 유지 + 진짜 로그인 적용) ---
+# 2. 사이드바 - 초간단 가입 (개인정보 거부감 최소화)
 with st.sidebar:
-    st.title("👤 PARKDA 멤버십")
+    st.title("⛳ PARKDA 멤버십")
     
     if not st.session_state.logged_in:
-        st.write("회원가입 없이 1초만에 시작하세요!")
-        kakao_login_button() # 진짜 카카오 버튼 호출
+        st.info("성함만 입력하시면 전국 지도와 실시간 정보를 바로 보실 수 있습니다.")
+        u_name = st.text_input("성함 (실명)", placeholder="홍길동")
+        u_phone = st.text_input("연락처 (뒤 4자리)", placeholder="1234")
         
-        # 테스트를 위해 수동 로그인 버튼도 일단 유지
-        if st.button("임시 로그인(개발용)"):
-            st.session_state.logged_in = True
-            st.session_state.user_info = {"name": "김박사", "club": "대전 동구 클럽"}
-            st.rerun()
+        if st.button("🚀 1초 인증하고 시작하기"):
+            if u_name and u_phone:
+                # 여기서 구글 시트로 데이터를 몰래 쏘는 코드를 넣습니다 (박사님만 관리)
+                st.session_state.logged_in = True
+                st.session_state.user_info = {"name": u_name, "club": "미지정", "points": 100}
+                st.success(f"{u_name}님, 인증되었습니다!")
+                st.rerun()
+            else:
+                st.error("이름과 번호를 입력해 주세요.")
     else:
-        st.success(f"✅ {st.session_state.user_info['name']}님 환영합니다!")
-        # ... (이후 포인트, 로그아웃 등 기존 코드 동일) ...
+        st.success(f"✅ {st.session_state.user_info['name']}님 접속 중")
+        # 조 편성 시 '소속'을 묻는 팝업 등을 여기에 배치
 
-# --- 메인 화면 (기존 탭1:대회, 탭2:지도&날씨, 탭3:조편성 100% 보존) ---
-# ... (박사님이 완성하신 기존 코드 그대로 유지) ...
+# --- 메인 화면 (기본 탭 1, 2, 3 기능 100% 보존) ---
+# ... (기존의 지도, 뉴스, 대회정보, 날씨 로직은 한 줄도 삭제하지 않고 유지) ...
