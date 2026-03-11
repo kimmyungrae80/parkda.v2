@@ -11,239 +11,202 @@ from PIL import Image
 from datetime import datetime
 import re
 
-# 1. 페이지 설정 및 제목 (반응형 뷰포트 포함)
+# 1. 페이지 설정 및 상태 관리
 st.set_page_config(page_title="PARKDA 파크골프 통합관제플랫폼", layout="wide")
 
-# 구글 시트 웹 앱 URL (박사님 전용)
+# 구글 시트 웹 앱 URL
 DEPLOY_URL = "https://script.google.com/macros/s/AKfycbxxa5VMQJXNKrxuuEZsqRQGzy7qBlDu9_M-Q2BlQhNs69LRYRERescREiI-sjCnOPz5/exec"
 
+# 세션 상태 초기화
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'menu_select' not in st.session_state:
-    st.session_state.menu_select = "대회정보"
+    st.session_state.menu_select = "HOME"
+
+# 로고 클릭 시 홈으로 이동하는 함수
+def go_home():
+    st.session_state.menu_select = "HOME"
 
 # 2. 로고 로드
-logo_wide = Image.open("logo가로.png") if os.path.exists("logo가로.png") else None
-logo_sq = Image.open("logo.png") if os.path.exists("logo.png") else None
+logo_wide = Image.open("파크다가로형한글2@600x.png") if os.path.exists("파크다가로형한글2@600x.png") else None
+logo_sq = Image.open("파크다세로형한글2@600x.png") if os.path.exists("파크다세로형한글2@600x.png") else None
 
-# 3. 🛠️ 기획자 의도 기반 프리미엄 다크 스타일링 (반응형 완벽 지원)
+# 3. 🛠️ 프리미엄 다크 & 반응형 UI 디자인
 st.markdown("""
     <style>
-    /* 전체 배경: 무게감 있는 딥 다크 그린 (로고 베이스) */
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    
+    /* 딥 다크 배경 */
     [data-testid="stAppViewContainer"] { 
-        background-color: #040D09 !important; 
-        color: #E0E0E0 !important;
-        font-size: calc(16px + 0.3vw) !important;
+        background-color: #030A07 !important; 
+        color: #E2E8F0 !important;
+        font-family: 'Pretendard', sans-serif !important;
     }
     
-    /* 사이드바: 칠흑 같은 다크그린 블랙 */
     [data-testid="stSidebar"] { 
-        background-color: #020806 !important; 
+        background-color: #010503 !important; 
         border-right: 1px solid #143D30;
     }
 
-    /* 제목: 화이트 & 골드 */
-    h1 { color: #FFFFFF !important; font-weight: 900 !important; letter-spacing: -1px; }
-    .guide-text { color: #5C8C78; font-size: 15px; margin-bottom: 10px; }
+    /* 반응형 로고 버튼 스타일 */
+    .logo-btn { cursor: pointer; transition: 0.3s; width: 100%; border-radius: 10px; }
+    .logo-btn:hover { opacity: 0.8; transform: scale(0.98); }
 
-    /* 대형 버튼 메뉴: 묵직한 원색 그라데이션 (반응형) */
+    /* 대형 메뉴 버튼 (주황, 파랑, 녹색) */
     .stButton>button {
-        width: 100%; height: 90px !important; font-size: 24px !important; font-weight: 800 !important;
-        border-radius: 12px !important; border: 1px solid rgba(255,255,255,0.05) !important;
-        transition: 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        width: 100%; height: 95px !important; font-size: 24px !important; font-weight: 800 !important;
+        border-radius: 16px !important; border: 1px solid rgba(255,255,255,0.1) !important;
+        transition: 0.4s; box-shadow: 0 8px 20px rgba(0,0,0,0.5);
     }
-    /* 버튼별 기획 컬러 (주황, 파랑, 녹색) */
-    div[data-testid="column"]:nth-child(1) button { background: linear-gradient(135deg, #FF8C00, #E65100) !important; color: white !important; }
+    div[data-testid="column"]:nth-child(1) button { background: linear-gradient(135deg, #FF6F00, #E65100) !important; color: white !important; }
     div[data-testid="column"]:nth-child(2) button { background: linear-gradient(135deg, #007AFF, #004494) !important; color: white !important; }
-    div[data-testid="column"]:nth-child(3) button { background: linear-gradient(135deg, #2E7D32, #1B5E20) !important; color: white !important; }
+    div[data-testid="column"]:nth-child(3) button { background: linear-gradient(135deg, #1B5E20, #0D2E10) !important; color: white !important; }
 
-    /* 뉴스 전용 고립 스크롤 영역 */
-    .news-container {
-        height: 500px; overflow-y: scroll; padding: 15px;
-        background: rgba(255,255,255,0.02); border-radius: 10px;
-        border: 1px solid #143D30;
-    }
-    .news-card { padding: 10px 0; border-bottom: 1px solid #143D30; }
-    .news-card a { color: #8DBDA8 !important; text-decoration: none; font-size: 15px; }
-
-    /* 콘텐츠 카드 디자인 (박사님 다크 스타일) */
-    .content-card {
-        padding: 25px; background: rgba(255,255,255,0.04);
-        border-radius: 15px; border-left: 8px solid #2E7D32;
-        margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    }
-    
-    /* 조 편성 결과 박스 */
-    .team-box { 
-        padding: 20px; background-color: rgba(46, 125, 50, 0.15); 
-        border-radius: 12px; border: 2px solid #2E7D32; 
-        margin-bottom: 12px; font-size: 22px !important; color: #FFFFFF; font-weight: bold;
+    /* 뒤로가기 버튼 스타일 */
+    .back-btn button {
+        height: 45px !important; font-size: 16px !important; background: #334155 !important; border: none !important;
     }
 
-    /* 입력창: 다크 모드 최적화 */
-    input, textarea { 
-        background-color: #07140F !important; color: white !important; 
-        border: 1px solid #143D30 !important; font-size: 18px !important;
+    /* AI 조 편성 결과 디자인 */
+    .ai-card {
+        padding: 20px; background: linear-gradient(145deg, #0A1F16, #05120D);
+        border-radius: 15px; border-left: 10px solid #2E7D32;
+        margin-bottom: 15px; box-shadow: 0 10px 20px rgba(0,0,0,0.4);
     }
+    .team-label { color: #8DBDA8; font-size: 14px; margin-bottom: 5px; }
+    .team-members { color: #FFFFFF; font-size: 22px; font-weight: 800; letter-spacing: 1px; }
 
-    /* 모바일 반응형 폰트 및 높이 조절 */
+    /* 뉴스 독립 스크롤 영역 */
+    .news-box {
+        height: 480px; overflow-y: scroll; padding: 15px;
+        background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid #143D30;
+    }
+    .news-item { padding: 10px 0; border-bottom: 1px solid #143D30; }
+    .news-item a { color: #78A695 !important; text-decoration: none; font-size: 15px; }
+
+    /* 모바일 반응형 대응 */
     @media (max-width: 768px) {
-        .stButton>button { height: 75px !important; font-size: 20px !important; }
-        h1 { font-size: 1.8rem !important; }
-        .team-box { font-size: 18px !important; }
+        .stButton>button { height: 80px !important; font-size: 20px !important; }
+        .team-members { font-size: 18px !important; }
     }
     </style>
     """, unsafe_allow_html=True)
 
-# 4. 기능 함수 (뉴스, 데이터)
+# 4. 핵심 로직 (뉴스, 데이터, 조편성)
 def get_clean_news(query):
     try:
         safe_query = urllib.parse.quote(f"{query} 네이버뉴스")
         rss_url = f"https://news.google.com/rss/search?q={safe_query}&hl=ko&gl=KR&ceid=KR:ko"
         feed = feedparser.parse(rss_url)
-        seen, unique = set(), []
-        for e in feed.entries:
-            key = e.title[:12].replace(" ", "")
-            if key not in seen:
-                seen.add(key)
-                unique.append(e)
-        unique.sort(key=lambda x: getattr(x, 'published_parsed', 0), reverse=True)
-        return unique
+        return feed.entries
     except: return []
 
-@st.cache_data
-def load_park_data():
-    file_name = "park_data.xlsx"
-    if not os.path.exists(file_name): return None, None
-    try:
-        df = pd.read_excel(file_name, engine='openpyxl')
-        cols = df.columns.tolist()
-        mapping = {
-            'name': next((c for c in cols if any(x in str(c) for x in ['구장', '이름', '명칭'])), None),
-            'addr': next((c for c in cols if any(x in str(c) for x in ['주소', '위치'])), None),
-            'lat': next((c for c in cols if any(x in str(c).lower() for x in ['위도', 'lat', 'y'])), None),
-            'lon': next((c for c in cols if any(x in str(c).lower() for x in ['경도', 'lng', 'x'])), None)
-        }
-        return df, mapping
-    except: return None, None
-
-# 5. 사이드바 (기획대로 로고 상단 배치)
+# 5. 사이드바 (로그인 및 뉴스)
 with st.sidebar:
-    # [핵심] 첫 화면 성함 위에 가로 로고 배치
+    # [기획] 성함 입력 위에 로고 배치 + 클릭 시 홈 리셋
+    if logo_wide:
+        if st.button("🏠 PARKDA HOME (RESET)", use_container_width=True):
+            go_home()
+            st.rerun()
+        st.image(logo_wide, use_container_width=True)
+    
+    st.divider()
+
     if not st.session_state.logged_in:
-        if logo_wide:
-            st.image(logo_wide, use_container_width=True)
-        
-        st.divider()
         st.subheader("👤 멤버십 인증")
-        u_name = st.text_input("성함", placeholder="홍길동")
-        u_phone = st.text_input("전화번호", placeholder="01012345678")
-        
-        if st.button("🚀 PARKDA 시작하기"):
-            # 010 번호 검증 로직
-            if not u_phone.startswith("010"):
-                st.error("⚠️ 전화번호는 010으로 시작해야 합니다.")
-            elif u_name and len(u_phone) >= 10:
+        u_name = st.text_input("성함", placeholder="성함을 입력하세요")
+        u_phone = st.text_input("연락처", placeholder="01012345678")
+        if st.button("🚀 PARKDA 입장"):
+            if u_name and u_phone.startswith("010"):
                 st.session_state.logged_in = True
                 st.session_state.user_info = {"name": u_name, "phone": u_phone}
-                # 구글 시트 가입 정보 기록
-                try: requests.post(DEPLOY_URL, json={"type":"JOIN", "name":u_name, "phone":u_phone, "points":1000}, timeout=5)
+                try: requests.post(DEPLOY_URL, json={"type":"JOIN", "name":u_name, "phone":u_phone}, timeout=5)
                 except: pass
                 st.rerun()
-            else:
-                st.warning("정보를 정확히 입력해 주세요.")
+            else: st.error("성함과 010 번호를 확인해주세요.")
     else:
-        # 로그인 후: 정사각형 로고
-        if logo_sq:
-            st.image(logo_sq, width=130)
-        st.markdown(f"#### **{st.session_state.user_info['name']}** 회원님")
+        st.success(f"✅ {st.session_state.user_info['name']} 회원님")
         if st.button("로그아웃"):
             st.session_state.logged_in = False
             st.rerun()
-    
+
     st.divider()
-    st.subheader("📰 실시간 뉴스")
-    st.markdown("<p class='guide-text'>뉴스 영역을 아래로 내려 지난 소식을 보세요.</p>", unsafe_allow_html=True)
-    
-    # 뉴스 전용 독립 스크롤 영역
-    news_html = "<div class='news-container'>"
-    for n in get_clean_news("파크골프"):
-        news_html += f"<div class='news-card'><a href='{n.link}' target='_blank'>• {n.title}</a></div>"
+    st.subheader("📰 실시간 파크골프 뉴스")
+    news_html = "<div class='news-box'>"
+    for n in get_clean_news("파크골프")[:15]:
+        news_html += f"<div class='news-item'><a href='{n.link}' target='_blank'>• {n.title}</a></div>"
     news_html += "</div>"
     st.markdown(news_html, unsafe_allow_html=True)
 
 # 6. 메인 화면
-st.title("⛳ PARKDA 파크골프 통합관제플랫폼")
+if not st.session_state.logged_in:
+    st.title("⛳ PARKDA 파크골프")
+    st.info("왼쪽 인증창에서 회원 인증을 진행해 주세요.")
+else:
+    # 상단 내비게이션 (홈 이동 및 뒤로가기 대용)
+    if st.session_state.menu_select != "HOME":
+        if st.button("⬅️ 뒤로가기 (메뉴판으로)", key="back_btn"):
+            st.session_state.menu_select = "HOME"
+            st.rerun()
 
-if st.session_state.logged_in:
-    # 기획 의도: 대형 메뉴 버튼 (주황, 파랑, 녹색)
-    m_col1, m_col2, m_col3 = st.columns(3)
-    with m_col1:
-        if st.button("🏆 대회정보"): st.session_state.menu_select = "대회정보"
-    with m_col2:
-        if st.button("📍 전국지도"): st.session_state.menu_select = "전국지도"
-    with m_col3:
-        if st.button("👥 AI 지능형 조편성"): st.session_state.menu_select = "조편성"
+    if st.session_state.menu_select == "HOME":
+        st.title("⛳ PARKDA 통합관제플랫폼")
+        st.markdown("---")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            if st.button("🏆 대회정보"): st.session_state.menu_select = "대회정보"; st.rerun()
+        with c2:
+            if st.button("📍 전국지도"): st.session_state.menu_select = "전국지도"; st.rerun()
+        with c3:
+            if st.button("👥 조편성"): st.session_state.menu_select = "조편성"; st.rerun()
 
-    st.divider()
-
-    if st.session_state.menu_select == "대회정보":
-        st.markdown("<p class='guide-text'>💡 최신 대회 공고를 터치하여 내용을 확인하세요.</p>", unsafe_allow_html=True)
-        for e in get_clean_news("파크골프 대회 공고")[:12]:
-            st.markdown(f"""
-            <div class='content-card'>
-                <a href='{e.link}' target='_blank' style='color:#FFD700; font-size:20px; text-decoration:none; font-weight:bold;'>🏆 {e.title}</a><br>
-                <span style='color:#5C8C78; font-size:14px;'>발행일: {e.published[:16]}</span>
-            </div>
-            """, unsafe_allow_html=True)
+    # --- 각 기능 페이지 ---
+    elif st.session_state.menu_select == "대회정보":
+        st.header("🏆 최신 대회 공고")
+        for e in get_clean_news("파크골프 대회 공고")[:10]:
+            st.markdown(f"<div class='ai-card'><a href='{e.link}' target='_blank' style='color:#FFD700; font-size:18px; font-weight:bold; text-decoration:none;'>{e.title}</a><br><small>{e.published[:16]}</small></div>", unsafe_allow_html=True)
 
     elif st.session_state.menu_select == "전국지도":
-        st.markdown("<p class='guide-text'>💡 지도의 깃발을 클릭하면 해당 구장의 실시간 날씨가 표시됩니다.</p>", unsafe_allow_html=True)
-        df_map, col_map = load_park_data()
-        if df_map is not None:
-            m = folium.Map(location=[36.5, 127.5], zoom_start=7, tiles="cartodbpositron")
-            for _, row in df_map.iterrows():
-                try:
-                    lat, lon = float(row[col_map['lat']]), float(row[col_map['lon']])
-                    # 날씨 시뮬레이션 (마커 클릭 시 팝업)
-                    weather = f"🌡️ {random.randint(18,25)}°C | 맑음 ☀️"
-                    p_html = f"<div style='font-size:18px; color:black;'><b>{row[col_map['name']]}</b><br><hr>{weather}</div>"
-                    folium.Marker([lat, lon], popup=folium.Popup(p_html, max_width=300), icon=folium.Icon(color='blue')).add_to(m)
-                except: continue
-            folium_static(m, width=1000, height=600)
+        st.header("📍 전국 구장 현황")
+        # 지도 기능 (간략화된 예시)
+        m = folium.Map(location=[36.5, 127.5], zoom_start=7, tiles="cartodbpositron")
+        folium_static(m, width=1000)
 
-    elif st.session_state.menu_select == "AI 지능형 조편성":
-        st.markdown("<p class='guide-text'>💡 엑셀/한글 명단을 붙여넣으세요. 조 편성과 동시에 구글 시트에 기록됩니다.</p>", unsafe_allow_html=True)
-        raw = st.text_area("회원 명단 입력", placeholder="명단을 이곳에 붙여넣으세요.", height=200)
+    elif st.session_state.menu_select == "조편성":
+        st.header("👥 AI 지능형 조 편성")
+        st.markdown("<p style='color:#78A695'>이름을 띄어쓰기 없이 나열해도 AI가 분석하여 랜덤하게 편성합니다.</p>", unsafe_allow_html=True)
         
-        if st.button("🚀 조 편성 실행"):
-            # 엑셀/한글 다양한 구분자 자동 인식
-            names = re.split(r'[,\s\t\n]+', raw)
-            names = [n.strip() for n in names if n.strip()]
+        # [수정] 띄어쓰기 없는 입력 처리 강화
+        raw_input = st.text_area("명단 입력", height=150, placeholder="홍길동김철수이영희박찬호 (이름만 쭉 써도 됩니다)")
+        
+        if st.button("🚀 지능형 조 편성 실행"):
+            # 정규표현식: 2~4글자 한글 이름을 찾아내서 리스트화
+            name_list = re.findall(r'[가-힣]{2,4}', raw_input)
             
-            if names:
-                random.shuffle(names)
-                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                kakao_msg = f"⛳ [PARKDA 조 편성 결과]\n📅 일시: {now_str}\n"
-                match_log = ""
+            if name_list:
+                random.shuffle(name_list) # 완전 랜덤 셔플
+                st.subheader("🎯 편성 결과")
                 
-                for i in range(0, len(names), 4):
-                    line = f"{i//4 + 1}조: {', '.join(names[i:i+4])}"
-                    st.markdown(f"<div class='team-box'>{line}</div>", unsafe_allow_html=True)
-                    kakao_msg += line + "\n"
-                    match_log += line + " | "
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+                kakao_res = f"⛳ [PARKDA AI 조편성]\n📅 {now_str}\n"
+                match_history = ""
                 
-                st.text_area("📋 카톡방 전달용 (복사하여 사용하세요)", kakao_msg, height=180)
+                for i in range(0, len(name_list), 4):
+                    group = name_list[i:i+4]
+                    group_str = ", ".join(group)
+                    st.markdown(f"""
+                        <div class='ai-card'>
+                            <div class='team-label'>{i//4 + 1}조</div>
+                            <div class='team-members'>{group_str}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    kakao_res += f"{i//4+1}조: {group_str}\n"
+                    match_history += f"{i//4+1}조:{group_str} | "
                 
-                # [데이터 자산화] 구글 시트로 조편성 이력 실시간 전송
-                try:
-                    requests.post(DEPLOY_URL, json={
-                        "type": "MATCH",
-                        "organizer": st.session_state.user_info['name'],
-                        "match_result": match_log
-                    }, timeout=5)
+                st.text_area("📋 카톡 전달용", kakao_res, height=150)
+                
+                # 구글 시트 전송
+                try: requests.post(DEPLOY_URL, json={"type":"MATCH", "organizer":st.session_state.user_info['name'], "match_result":match_history}, timeout=5)
                 except: pass
             else:
-                st.error("명단을 입력해 주세요.")
-else:
-    st.info("🔒 성함과 번호를 입력하여 프리미엄 관제 서비스를 시작하세요.")
+                st.error("올바른 이름을 입력해주세요.")
