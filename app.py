@@ -140,31 +140,47 @@ if st.session_state.logged_in:
                 except: continue
             folium_static(m, width=900, height=550)
 
+# ... 상단 import 부분 생략 (datetime, requests 필수 포함) ...
+
     with tab3:
         st.subheader("🤖 AI 지능형 조 편성 시스템")
         raw = st.text_area("명단 입력 (이름 사이 공백)", "김명래 박지성 손흥민 이강인 조규성 황희찬", height=150)
         
-        if st.button("🚀 AI 조 편성 실행"):
+        if st.button("🚀 조 편성 실행"):
             names = [n.strip() for n in raw.replace(',', ' ').split() if n.strip()]
             if names:
                 random.shuffle(names)
-                kakao_msg = f"⛳ [PARKDA AI 조 편성 결과]\n"
-                kakao_msg += f"📅 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S') # 실시간 날짜/시간
+                
+                kakao_msg = f"⛳ [PARKDA 조 편성 결과]\n"
+                kakao_msg += f"📅 일시: {now_str}\n"
                 kakao_msg += "----------------------------\n"
+                
+                match_log = "" # DB 저장용 텍스트
                 
                 for i in range(0, len(names), 4):
                     group = names[i:i+4]
-                    line = f"🤖 AI {i//4 + 1}조: {', '.join(group)}"
+                    # 조 이름에서 'AI' 제거 (박사님 요청)
+                    line = f"{i//4 + 1}조: {', '.join(group)}"
                     st.markdown(f'<div class="team-box">{line}</div>', unsafe_allow_html=True)
                     kakao_msg += line + "\n"
+                    match_log += line + " | "
                 
                 kakao_msg += "----------------------------\n"
                 kakao_msg += "공정하게 편성되었습니다. 즐거운 라운딩 되세요! ⛳"
 
+                # [데이터 자산화] 구글 시트로 조편성 결과 전송
+                match_data = {
+                    "type": "MATCH",
+                    "organizer": st.session_state.user_info['name'], # 누가 짰는지 기록
+                    "match_result": match_log
+                }
+                try:
+                    requests.post(DEPLOY_URL, json=match_data)
+                except: pass
+
                 st.divider()
-                st.success("✅ 조 편성이 완료되었습니다! 아래 내용을 복사해서 카톡방에 올리세요.")
-                st.text_area("📋 카톡방 전달용", kakao_msg, height=180)
+                st.success(f"✅ 조 편성이 완료되었고, 데이터가 기록되었습니다! ({now_str})")
+                st.text_area("📋 카톡방 전달용 (복사해서 사용하세요)", kakao_msg, height=180)
             else:
                 st.error("명단을 입력해 주세요.")
-else:
-    st.warning("🔒 사이드바에서 실명 인증 후 전체 기능을 이용하세요.")
