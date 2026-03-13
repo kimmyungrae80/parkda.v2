@@ -8,6 +8,7 @@ import re
 import uuid
 import json
 from pathlib import Path
+import requests
 
 # =========================================================
 # 1. 기본 설정
@@ -19,8 +20,12 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. 로컬 저장 설정
-#    - 추후 구글시트/API로 교체 가능
+# 2. Apps Script 웹앱 URL
+# =========================================================
+DEPLOY_URL = "https://script.google.com/macros/s/AKfycbyp_boO_2lakqlDT64cxFlmh_wtXcazzoXSjK2MMwUTrSryLzZWaAk7ozSz8sMGlXCG/exec"
+
+# =========================================================
+# 3. 로컬 저장 설정
 # =========================================================
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
@@ -90,7 +95,7 @@ PAR_9_DEFAULT = [4, 3, 4, 3, 4, 3, 4, 3, 4]
 PAR_18_DEFAULT = [4, 3, 4, 3, 4, 3, 4, 3, 4, 4, 3, 4, 3, 4, 3, 4, 3, 4]
 
 # =========================================================
-# 3. 저장/로드 유틸
+# 4. 저장/로드 유틸
 # =========================================================
 def save_json(path: Path, data):
     with open(path, "w", encoding="utf-8") as f:
@@ -117,7 +122,7 @@ ensure_course_file()
 COURSES = load_json(COURSES_FILE, DEFAULT_COURSES)
 
 # =========================================================
-# 4. 세션 상태 초기화
+# 5. 세션 상태 초기화
 # =========================================================
 def init_session():
     defaults = {
@@ -137,7 +142,7 @@ def init_session():
 init_session()
 
 # =========================================================
-# 5. 스타일
+# 6. 스타일
 # =========================================================
 st.markdown("""
 <style>
@@ -186,11 +191,20 @@ html, body, [class*="css"] {
 """, unsafe_allow_html=True)
 
 # =========================================================
-# 6. 공용 유틸
+# 7. 공용 유틸
 # =========================================================
 def persist_all():
     save_json(MATCHES_FILE, st.session_state.matches)
     save_json(USERS_FILE, st.session_state.users)
+
+
+def post_to_gsheet(payload: dict):
+    try:
+        res = requests.post(DEPLOY_URL, json=payload, timeout=10)
+        return res.status_code, res.text
+    except Exception as e:
+        st.warning(f"구글시트 전송 실패: {e}")
+        return None, str(e)
 
 
 def parse_names(raw_text: str) -> list:
@@ -363,7 +377,9 @@ def get_course_stats():
 
 def register_user(name: str, phone: str):
     key = f"{name}_{phone}"
-    if key not in st.session_state.users:
+    is_new = key not in st.session_state.users
+
+    if is_new:
         st.session_state.users[key] = {
             "name": name,
             "phone": phone,
@@ -374,10 +390,19 @@ def register_user(name: str, phone: str):
     else:
         st.session_state.users[key]["last_login"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         st.session_state.users[key]["login_count"] = st.session_state.users[key].get("login_count", 0) + 1
+
     persist_all()
 
+    post_to_gsheet({
+        "type": "JOIN",
+        "name": name,
+        "phone": phone,
+        "points": 0,
+        "memo": "신규회원" if is_new else "재로그인"
+    })
+
 # =========================================================
-# 7. 사이드바
+# 8. 사이드바
 # =========================================================
 with st.sidebar:
     st.markdown("## ⛳ PARKDA")
@@ -428,7 +453,7 @@ with st.sidebar:
             st.rerun()
 
 # =========================================================
-# 8. 로그인 전 화면
+# 9. 로그인 전 화면
 # =========================================================
 if not st.session_state.logged_in:
     st.markdown("<div class='title-main'>⛳ PARKDA 파크골프 통합관제플랫폼</div>", unsafe_allow_html=True)
@@ -438,7 +463,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # =========================================================
-# 9. HOME
+# 10. HOME
 # =========================================================
 if st.session_state.menu == "HOME":
     kpi = get_match_kpis()
@@ -501,7 +526,7 @@ if st.session_state.menu == "HOME":
         st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================================================
-# 10. 경기 생성
+# 11. 경기 생성
 # =========================================================
 elif st.session_state.menu == "CREATE_MATCH":
     st.title("📝 경기 생성")
@@ -559,6 +584,35 @@ elif st.session_state.menu == "CREATE_MATCH":
             }
             st.session_state.current_match_id = match_id
             persist_all()
+
+            post_to_gsheet({
+                "type": "GAME",
+                "game_id": match_id,
+                "game_name": title.strip(),
+                "match_date": str(match_date),
+                "course_name": course_name,
+                "hole_count": hole_count,
+                "group_size": group_size,
+                "organizer": organizer.strip(),
+                "players": players,
+                "memo": ""
+            })
+
+            match_result_text = " | ".join([
+                f"{g['group_no']}조({g['start_hole']}홀): {', '.join(g['players'])}"
+                for g in group_info
+            ])
+
+            post_to_gsheet({
+                "type": "MATCH",
+                "organizer": organizer.strip(),
+                "game_name": title.strip(),
+                "course_name": course_name,
+                "hole_count": hole_count,
+                "match_result": match_result_text,
+                "memo": ""
+            })
+
             st.success(f"경기가 생성되었습니다. 경기 ID: {match_id}")
 
     current_id = st.session_state.current_match_id
@@ -580,7 +634,7 @@ elif st.session_state.menu == "CREATE_MATCH":
             st.rerun()
 
 # =========================================================
-# 11. 경기 목록
+# 12. 경기 목록
 # =========================================================
 elif st.session_state.menu == "MATCH_LIST":
     st.title("📋 경기 목록")
@@ -617,7 +671,7 @@ elif st.session_state.menu == "MATCH_LIST":
                     st.rerun()
 
 # =========================================================
-# 12. SCORE
+# 13. SCORE
 # =========================================================
 elif st.session_state.menu.startswith("SCORE_"):
     match_id = st.session_state.menu.replace("SCORE_", "")
@@ -655,16 +709,65 @@ elif st.session_state.menu.startswith("SCORE_"):
             if st.button("💾 스코어 저장", use_container_width=True):
                 st.session_state.matches[match_id]["score_df"] = df_to_records(edited_df)
                 persist_all()
+
+                result_df = compute_score_result(edited_df, match["hole_count"])
+                hole_cols = [f"{i}홀" for i in range(1, match["hole_count"] + 1)]
+
+                score_rows = []
+                for _, row in result_df.iterrows():
+                    score_rows.append({
+                        "player": row["선수명"],
+                        "scores": [int(row[col]) for col in hole_cols],
+                        "total": int(row["합계"]),
+                        "rank": int(row["순위"])
+                    })
+
+                post_to_gsheet({
+                    "type": "SCORE",
+                    "game_id": match_id,
+                    "game_name": match["title"],
+                    "match_date": match["match_date"],
+                    "course_name": match["course_name"],
+                    "hole_count": match["hole_count"],
+                    "score_rows": score_rows,
+                    "memo": ""
+                })
+
                 st.success("스코어가 저장되었습니다.")
+
         with c2:
             if st.button("📊 결과 보기", use_container_width=True):
                 st.session_state.matches[match_id]["score_df"] = df_to_records(edited_df)
                 persist_all()
+
+                result_df = compute_score_result(edited_df, match["hole_count"])
+                hole_cols = [f"{i}홀" for i in range(1, match["hole_count"] + 1)]
+
+                score_rows = []
+                for _, row in result_df.iterrows():
+                    score_rows.append({
+                        "player": row["선수명"],
+                        "scores": [int(row[col]) for col in hole_cols],
+                        "total": int(row["합계"]),
+                        "rank": int(row["순위"])
+                    })
+
+                post_to_gsheet({
+                    "type": "SCORE",
+                    "game_id": match_id,
+                    "game_name": match["title"],
+                    "match_date": match["match_date"],
+                    "course_name": match["course_name"],
+                    "hole_count": match["hole_count"],
+                    "score_rows": score_rows,
+                    "memo": "결과보기 진입 시 저장"
+                })
+
                 st.session_state.menu = f"RESULT_{match_id}"
                 st.rerun()
 
 # =========================================================
-# 13. RESULT
+# 14. RESULT
 # =========================================================
 elif st.session_state.menu.startswith("RESULT_"):
     match_id = st.session_state.menu.replace("RESULT_", "")
@@ -706,7 +809,7 @@ elif st.session_state.menu.startswith("RESULT_"):
                 st.rerun()
 
 # =========================================================
-# 14. 구장 지도
+# 15. 구장 지도
 # =========================================================
 elif st.session_state.menu == "COURSE_MAP":
     st.title("📍 전국 구장 지도")
@@ -734,7 +837,7 @@ elif st.session_state.menu == "COURSE_MAP":
     st.dataframe(pd.DataFrame(filtered), use_container_width=True, hide_index=True)
 
 # =========================================================
-# 15. 유튜브
+# 16. 유튜브
 # =========================================================
 elif st.session_state.menu == "YOUTUBE":
     st.title("🎥 파크골프 유튜브")
@@ -751,7 +854,7 @@ elif st.session_state.menu == "YOUTUBE":
         )
 
 # =========================================================
-# 16. 관리자 KPI
+# 17. 관리자 KPI
 # =========================================================
 elif st.session_state.menu == "ADMIN_KPI":
     st.title("📈 관리자 KPI 대시보드")
@@ -808,7 +911,7 @@ elif st.session_state.menu == "ADMIN_KPI":
         st.dataframe(player_stats.head(10), use_container_width=True, hide_index=True)
 
 # =========================================================
-# 17. 누적 랭킹
+# 18. 누적 랭킹
 # =========================================================
 elif st.session_state.menu == "RANKING":
     st.title("🏅 누적 랭킹")
@@ -824,7 +927,7 @@ elif st.session_state.menu == "RANKING":
         st.dataframe(ranking_df, use_container_width=True, hide_index=True)
 
 # =========================================================
-# 18. fallback
+# 19. fallback
 # =========================================================
 else:
     st.session_state.menu = "HOME"
