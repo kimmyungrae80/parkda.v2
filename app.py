@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
@@ -9,20 +10,31 @@ import uuid
 import json
 from pathlib import Path
 import requests
+from urllib.parse import quote
 
 # =========================================================
 # 1. 기본 설정
 # =========================================================
 st.set_page_config(
-    page_title="PARKDA 파크골프 통합관제플랫폼 v2",
+    page_title="PARKDA 파크골프 통합관제플랫폼",
     page_icon="⛳",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # =========================================================
-# 2. Apps Script 웹앱 URL
+# 2. 환경 설정
 # =========================================================
 DEPLOY_URL = "https://script.google.com/macros/s/AKfycbyp_boO_2lakqlDT64cxFlmh_wtXcazzoXSjK2MMwUTrSryLzZWaAk7ozSz8sMGlXCG/exec"
+
+# 관리자 지정: 본인 번호로 바꾸세요
+ADMIN_PHONES = {
+    "01071287551",   # 예시
+    # "010xxxxxxxx"
+}
+
+# 카카오맵 JavaScript 키가 있으면 넣으세요. 없으면 자동으로 Folium 사용
+KAKAO_JS_KEY = ""
 
 # =========================================================
 # 3. 로컬 저장 설정
@@ -76,20 +88,74 @@ DEFAULT_COURSES = [
     }
 ]
 
-YOUTUBE_CHANNELS = [
-    {
-        "title": "파크골프 레슨 채널",
-        "url": "https://www.youtube.com/results?search_query=%ED%8C%8C%ED%81%AC%EA%B3%A8%ED%94%84+%EB%A0%88%EC%8A%A8"
-    },
-    {
-        "title": "파크골프 대회 영상",
-        "url": "https://www.youtube.com/results?search_query=%ED%8C%8C%ED%81%AC%EA%B3%A8%ED%94%84+%EB%8C%80%ED%9A%8C"
-    },
-    {
-        "title": "전국 파크골프장 소개",
-        "url": "https://www.youtube.com/results?search_query=%ED%8C%8C%ED%81%AC%EA%B3%A8%ED%94%84%EC%9E%A5+%EC%86%8C%EA%B0%9C"
-    }
-]
+YOUTUBE_VIDEOS = {
+    "레슨영상": [
+        {
+            "title": "[파크골프 레슨] 초보와 고수는 티샷 시 생각부터 다릅니다!",
+            "url": "https://www.youtube.com/watch?v=-Y4Ln3FtmP8"
+        },
+        {
+            "title": "[파크골프 레슨] 정타 치고 싶으신가요? 이 동작 이젠 그만!",
+            "url": "https://www.youtube.com/watch?v=nSDoAKzk2VA"
+        },
+        {
+            "title": "[파크골프 레슨] 헤드를 던지는 순간 비거리와 정타가 달라집니다",
+            "url": "https://www.youtube.com/watch?v=alt1FwmJ3DM"
+        },
+        {
+            "title": "[파크골프 레슨] 가장 중요한 건 기본기입니다",
+            "url": "https://www.youtube.com/watch?v=BVAldLrRLak"
+        },
+        {
+            "title": "[파크골프 레슨] 9가지 실전 꿀팁 공개",
+            "url": "https://www.youtube.com/watch?v=swi24qWuA7Q"
+        }
+    ],
+    "대회영상": [
+        {
+            "title": "2025 제3회 문화체육관광부장관기 전국파크골프대회",
+            "url": "https://www.youtube.com/watch?v=BAGR4EIBlXI"
+        },
+        {
+            "title": "[Full] 2025 수성그린 전국 파크골프 선수권대회",
+            "url": "https://www.youtube.com/watch?v=DfVqZn7GkQ4"
+        },
+        {
+            "title": "짜릿한 승부! 전국 파크골프 대회 현장",
+            "url": "https://www.youtube.com/watch?v=YXYUb7hv8L0"
+        },
+        {
+            "title": "2026 시즌 첫 전국파크골프 대회 개막",
+            "url": "https://www.youtube.com/watch?v=RCPcjPsqPRs"
+        },
+        {
+            "title": "[Full] 2026 설특집 마실 스크린파크골프 대회",
+            "url": "https://www.youtube.com/watch?v=pWPxCQbRfeQ"
+        }
+    ],
+    "구장소개": [
+        {
+            "title": "장성 황룡강파크골프장 A구장 소개",
+            "url": "https://www.youtube.com/watch?v=0hwSbJpFkLU"
+        },
+        {
+            "title": "파크골프와 숙박 식사까지 가능한 구장 소개",
+            "url": "https://www.youtube.com/watch?v=1Hv0Kscaq-I"
+        },
+        {
+            "title": "영암파크골프장 소개 영상",
+            "url": "https://www.youtube.com/watch?v=o-F7bNdCjWc"
+        },
+        {
+            "title": "양평 파크골프장 구장 소개 및 라운드 후기",
+            "url": "https://www.youtube.com/watch?v=qKZCCoRZlF0"
+        },
+        {
+            "title": "진주 평거 파크골프장 구장 소개 및 라운드 영상",
+            "url": "https://www.youtube.com/watch?v=2xvfq7thi2k"
+        }
+    ]
+}
 
 PAR_9_DEFAULT = [4, 3, 4, 3, 4, 3, 4, 3, 4]
 PAR_18_DEFAULT = [4, 3, 4, 3, 4, 3, 4, 3, 4, 4, 3, 4, 3, 4, 3, 4, 3, 4]
@@ -130,9 +196,12 @@ def init_session():
         "user_name": "",
         "phone": "",
         "menu": "HOME",
+        "history": [],
         "matches": load_json(MATCHES_FILE, {}),
         "users": load_json(USERS_FILE, {}),
         "current_match_id": None,
+        "api_logs": [],
+        "score_ui": {}
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -147,45 +216,176 @@ init_session()
 st.markdown("""
 <style>
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
 html, body, [class*="css"] {
     font-family: 'Pretendard', sans-serif !important;
 }
+
 .block-container {
-    padding-top: 1.1rem;
+    padding-top: 1rem;
     padding-bottom: 2rem;
+    max-width: 1400px;
 }
+
+[data-testid="stSidebar"] {
+    border-right: 1px solid #e5e7eb;
+}
+
+.title-main {
+    font-size: 2.1rem;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.2;
+}
+
+.sub-main {
+    color: #475569;
+    font-size: 1rem;
+    margin-top: 0.3rem;
+}
+
 .kpi-card {
     padding: 18px;
     border-radius: 18px;
     background: linear-gradient(135deg, #0f172a, #1e293b);
     color: white;
-    border: 1px solid rgba(255,255,255,0.08);
     min-height: 120px;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.12);
 }
+
+.feature-card {
+    padding: 18px;
+    border-radius: 18px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.06);
+    height: 100%;
+}
+
+.feature-card h4 {
+    color: #0f172a;
+    margin-bottom: 8px;
+}
+
+.feature-card p {
+    color: #475569;
+    font-size: 0.95rem;
+    min-height: 64px;
+}
+
 .match-card {
     padding: 16px;
     border-radius: 16px;
-    background: #f8fafc;
-    border-left: 8px solid #16a34a;
-    margin-bottom: 10px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 14px rgba(15,23,42,0.05);
+    margin-bottom: 12px;
+    color: #0f172a !important;
 }
+
+.match-card b,
+.match-card div,
+.match-card span,
+.match-card p {
+    color: #0f172a !important;
+}
+
 .section-card {
     padding: 18px;
     border-radius: 18px;
-    background: #f8fafc;
+    background: #ffffff;
     border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 14px rgba(15,23,42,0.05);
 }
-.title-main {
-    font-size: 32px;
-    font-weight: 800;
-}
-.sub-main {
-    color: #475569;
-    font-size: 15px;
-}
+
 .small-muted {
     color: #64748b;
     font-size: 13px;
+}
+
+.yt-card {
+    padding: 12px;
+    border-radius: 16px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 14px rgba(15,23,42,0.05);
+    margin-bottom: 12px;
+    color: #0f172a;
+}
+
+.yt-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+    min-height: 40px;
+    margin-top: 8px;
+}
+
+.copy-box {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fff;
+    padding: 12px;
+}
+
+.topnav-wrap {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.score-hole-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 10px;
+    background: #fff;
+    text-align: center;
+}
+
+.score-value {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.par-badge {
+    display:inline-block;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: #ecfeff;
+    color: #155e75;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.notice-box {
+    padding: 14px;
+    border-radius: 14px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e3a8a;
+}
+
+.admin-badge {
+    display:inline-block;
+    padding:4px 10px;
+    border-radius:999px;
+    background:#dcfce7;
+    color:#166534;
+    font-size:12px;
+    font-weight:700;
+}
+
+@media (max-width: 768px) {
+    .title-main {
+        font-size: 1.6rem;
+    }
+    .feature-card p {
+        min-height: unset;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -198,13 +398,65 @@ def persist_all():
     save_json(USERS_FILE, st.session_state.users)
 
 
+def is_admin():
+    return st.session_state.phone in ADMIN_PHONES
+
+
+def add_api_log(action, status, detail):
+    st.session_state.api_logs.insert(0, {
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "action": action,
+        "status": status,
+        "detail": detail[:500] if isinstance(detail, str) else str(detail)[:500]
+    })
+    st.session_state.api_logs = st.session_state.api_logs[:20]
+
+
 def post_to_gsheet(payload: dict):
     try:
-        res = requests.post(DEPLOY_URL, json=payload, timeout=10)
+        res = requests.post(
+            DEPLOY_URL,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            timeout=15
+        )
+        add_api_log(payload.get("type", "UNKNOWN"), f"HTTP {res.status_code}", res.text)
         return res.status_code, res.text
     except Exception as e:
-        st.warning(f"구글시트 전송 실패: {e}")
+        add_api_log(payload.get("type", "UNKNOWN"), "ERROR", str(e))
         return None, str(e)
+
+
+def go(page: str):
+    current = st.session_state.menu
+    if current != page:
+        st.session_state.history.append(current)
+        st.session_state.menu = page
+
+
+def go_back():
+    if st.session_state.history:
+        st.session_state.menu = st.session_state.history.pop()
+    else:
+        st.session_state.menu = "HOME"
+
+
+def render_topbar(title: str, subtitle: str = ""):
+    left, right = st.columns([5, 2])
+    with left:
+        st.markdown(f"<div class='title-main'>{title}</div>", unsafe_allow_html=True)
+        if subtitle:
+            st.markdown(f"<div class='sub-main'>{subtitle}</div>", unsafe_allow_html=True)
+    with right:
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("⬅ 이전", use_container_width=True, key=f"back_{title}"):
+                go_back()
+                st.rerun()
+        with c2:
+            if st.button("🏠 홈", use_container_width=True, key=f"home_{title}"):
+                st.session_state.menu = "HOME"
+                st.rerun()
 
 
 def parse_names(raw_text: str) -> list:
@@ -251,6 +503,17 @@ def build_empty_score_df(players: list, hole_count: int) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def build_par_score_df(players: list, par_list: list) -> pd.DataFrame:
+    hole_labels = [f"{i}홀" for i in range(1, len(par_list) + 1)]
+    rows = []
+    for player in players:
+        row = {"선수명": player}
+        for idx, h in enumerate(hole_labels):
+            row[h] = par_list[idx]
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def compute_score_result(score_df: pd.DataFrame, hole_count: int) -> pd.DataFrame:
     hole_cols = [f"{i}홀" for i in range(1, hole_count + 1)]
     result = score_df.copy()
@@ -284,6 +547,20 @@ def build_share_text(match: dict, result_df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def build_group_share_text(match: dict) -> str:
+    lines = [
+        "⛳ [PARKDA 조편성 결과]",
+        f"경기명: {match['title']}",
+        f"일시: {match['match_date']}",
+        f"구장: {match['course_name']}",
+        f"홀수: {match['hole_count']}홀",
+        ""
+    ]
+    for g in match["groups"]:
+        lines.append(f"{g['group_no']}조 ({g['start_hole']}홀 출발): {', '.join(g['players'])}")
+    return "\n".join(lines)
+
+
 def get_match_kpis():
     total_matches = len(st.session_state.matches)
     total_players = 0
@@ -307,9 +584,11 @@ def get_match_kpis():
     }
 
 
-def get_player_stats():
+def get_player_stats(course_filter=None):
     all_rows = []
     for match in st.session_state.matches.values():
+        if course_filter and match["course_name"] != course_filter:
+            continue
         score_records = match.get("score_df")
         if not score_records:
             continue
@@ -329,18 +608,17 @@ def get_player_stats():
             })
 
     if not all_rows:
-        return pd.DataFrame(columns=["선수명", "경기수", "평균타수", "최고성적", "최근경기"])
+        return pd.DataFrame(columns=["선수명", "구장", "경기수", "평균타수", "최고성적", "최근경기"])
 
     base = pd.DataFrame(all_rows)
-    grouped = base.groupby("선수명", as_index=False).agg(
+    grouped = base.groupby(["선수명", "구장"], as_index=False).agg(
         경기수=("합계", "count"),
         평균타수=("합계", "mean"),
         최고성적=("순위", "min")
     )
     grouped["평균타수"] = grouped["평균타수"].round(1)
-
-    recent = base.sort_values(by=["일자"], ascending=False).drop_duplicates(subset=["선수명"])
-    grouped = grouped.merge(recent[["선수명", "경기명"]], on="선수명", how="left")
+    recent = base.sort_values(by=["일자"], ascending=False).drop_duplicates(subset=["선수명", "구장"])
+    grouped = grouped.merge(recent[["선수명", "구장", "경기명"]], on=["선수명", "구장"], how="left")
     grouped = grouped.rename(columns={"경기명": "최근경기"})
     grouped = grouped.sort_values(by=["경기수", "평균타수"], ascending=[False, True]).reset_index(drop=True)
     return grouped
@@ -401,12 +679,165 @@ def register_user(name: str, phone: str):
         "memo": "신규회원" if is_new else "재로그인"
     })
 
+
+def get_video_id(url: str):
+    m = re.search(r"v=([A-Za-z0-9_-]{11})", url)
+    return m.group(1) if m else None
+
+
+def youtube_thumbnail(url: str):
+    vid = get_video_id(url)
+    if not vid:
+        return None
+    return f"https://img.youtube.com/vi/{vid}/hqdefault.jpg"
+
+
+def copy_widget(text: str, key: str, height=180):
+    escaped = json.dumps(text, ensure_ascii=False)
+    html = f"""
+    <div style="margin-top:6px;">
+      <textarea id="copy_area_{key}" style="width:100%;height:{height}px;border:1px solid #d1d5db;border-radius:12px;padding:10px;font-size:14px;">{text}</textarea>
+      <button onclick='navigator.clipboard.writeText({escaped});this.innerText="복사완료";'
+        style="margin-top:8px;padding:10px 14px;border:none;border-radius:10px;background:#0f172a;color:white;cursor:pointer;font-weight:700;">
+        전체복사
+      </button>
+    </div>
+    """
+    components.html(html, height=height + 70)
+
+
+def render_feature_teaser():
+    st.markdown("<div class='title-main'>⛳ PARKDA 파크골프 통합관제플랫폼</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='sub-main'>로그인하면 경기 생성, 조편성, 스코어 기록, 구장 지도, 유튜브 학습, 구장별 누적 랭킹까지 바로 사용할 수 있습니다.</div>",
+        unsafe_allow_html=True
+    )
+    st.write("")
+
+    cols = st.columns(3)
+    features = [
+        ("📝 경기 생성", "참가자만 넣으면 9홀/18홀 경기 생성과 자동 조편성을 바로 만들 수 있습니다."),
+        ("👥 조편성 공유", "생성된 조편성을 전체복사해서 카카오톡, 밴드, 단체방에 바로 전파할 수 있습니다."),
+        ("📋 스코어 기록", "PAR 기준 + / - 방식으로 1홀부터 9홀까지 빠르게 입력할 수 있습니다."),
+        ("🏅 구장별 랭킹", "구장마다 기준이 다르기 때문에 구장별로 누적 랭킹을 확인할 수 있습니다."),
+        ("📍 전국 구장 지도", "구장 위치, 연락처, 이용료를 확인하고 카카오맵 또는 지도 기반으로 탐색할 수 있습니다."),
+        ("🎥 유튜브 학습", "레슨영상, 대회영상, 구장소개를 카테고리별로 보고 바로 들어갈 수 있습니다.")
+    ]
+    for i, (title, desc) in enumerate(features):
+        with cols[i % 3]:
+            st.markdown(
+                f"""
+                <div class='feature-card'>
+                    <h4>{title}</h4>
+                    <p>{desc}</p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            if st.button(f"{title} 사용하기", key=f"teaser_{i}", use_container_width=True):
+                st.warning("로그인 후 사용할 수 있습니다. 왼쪽 사이드바에서 로그인해주세요.")
+
+    st.write("")
+    st.markdown(
+        "<div class='notice-box'>로그인 전에는 기능 소개만 볼 수 있고, 실제 저장·조편성·스코어 입력은 로그인 후 가능합니다.</div>",
+        unsafe_allow_html=True
+    )
+
+
+def render_map(courses):
+    if KAKAO_JS_KEY:
+        markers = json.dumps(courses, ensure_ascii=False)
+        html = f"""
+        <div id="map" style="width:100%;height:520px;border-radius:16px;"></div>
+        <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey={KAKAO_JS_KEY}"></script>
+        <script>
+          const data = {markers};
+          const center = new kakao.maps.LatLng(data[0]?.lat || 36.5, data[0]?.lon || 127.8);
+          const mapContainer = document.getElementById('map');
+          const mapOption = {{ center: center, level: 8 }};
+          const map = new kakao.maps.Map(mapContainer, mapOption);
+
+          data.forEach(function(item) {{
+            const position = new kakao.maps.LatLng(item.lat, item.lon);
+            const marker = new kakao.maps.Marker({{ position: position }});
+            marker.setMap(map);
+
+            const infowindow = new kakao.maps.InfoWindow({{
+              content: `
+                <div style="padding:10px;min-width:220px;font-size:13px;line-height:1.5;">
+                  <b>${{item.name}}</b><br/>
+                  지역: ${{item.region}}<br/>
+                  주소: ${{item.address}}<br/>
+                  홀수: ${{item.holes}}홀<br/>
+                  이용료: ${{item.fee}}<br/>
+                  전화: ${{item.phone}}
+                </div>
+              `
+            }});
+
+            kakao.maps.event.addListener(marker, 'click', function() {{
+              infowindow.open(map, marker);
+            }});
+          }});
+        </script>
+        """
+        components.html(html, height=540)
+    else:
+        if courses:
+            center_lat = sum(c["lat"] for c in courses) / len(courses)
+            center_lon = sum(c["lon"] for c in courses) / len(courses)
+        else:
+            center_lat, center_lon = 36.5, 127.8
+
+        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=7)
+        for c in courses:
+            popup_html = f"""
+            <b>{c['name']}</b><br>
+            지역: {c['region']}<br>
+            주소: {c['address']}<br>
+            홀수: {c['holes']}홀<br>
+            이용료: {c['fee']}<br>
+            전화: {c['phone']}
+            """
+            folium.Marker([c["lat"], c["lon"]], popup=popup_html, tooltip=c["name"]).add_to(fmap)
+        st_folium(fmap, width="100%", height=520)
+
+        st.info("카카오맵 JavaScript 키가 없어 현재는 기본 지도로 표시됩니다. 키를 넣으면 카카오맵으로 바꿀 수 있습니다.")
+
+
+def ensure_score_ui(match_id, match):
+    ui_key = f"score_{match_id}"
+    if ui_key not in st.session_state.score_ui:
+        score_df = records_to_df(match["score_df"])
+        if score_df.empty:
+            score_df = build_par_score_df(match["players"], match["par_list"])
+        score_map = {}
+        for _, row in score_df.iterrows():
+            player = row["선수명"]
+            score_map[player] = {}
+            for i in range(1, match["hole_count"] + 1):
+                score_map[player][f"{i}홀"] = int(row[f"{i}홀"])
+        st.session_state.score_ui[ui_key] = score_map
+    return st.session_state.score_ui[ui_key]
+
+
+def score_ui_to_df(match_id, match):
+    ui_key = f"score_{match_id}"
+    score_map = st.session_state.score_ui.get(ui_key, {})
+    rows = []
+    for player in match["players"]:
+        row = {"선수명": player}
+        for i in range(1, match["hole_count"] + 1):
+            row[f"{i}홀"] = int(score_map.get(player, {}).get(f"{i}홀", match["par_list"][i-1]))
+        rows.append(row)
+    return pd.DataFrame(rows)
+
 # =========================================================
 # 8. 사이드바
 # =========================================================
 with st.sidebar:
     st.markdown("## ⛳ PARKDA")
-    st.caption("파크골프 통합관제플랫폼 v2")
+    st.caption("파크골프 통합관제플랫폼")
 
     if not st.session_state.logged_in:
         name = st.text_input("성함", placeholder="홍길동")
@@ -421,12 +852,16 @@ with st.sidebar:
             else:
                 st.error("성함과 010 번호를 확인해주세요.")
     else:
-        st.success(f"✅ {st.session_state.user_name} 님")
+        badge = "<span class='admin-badge'>관리자</span>" if is_admin() else ""
+        st.markdown(f"**{st.session_state.user_name}님** {badge}", unsafe_allow_html=True)
+        st.caption(f"연락처: {st.session_state.phone}")
+
         if st.button("로그아웃", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.user_name = ""
             st.session_state.phone = ""
             st.session_state.menu = "HOME"
+            st.session_state.history = []
             st.rerun()
 
         st.divider()
@@ -434,42 +869,56 @@ with st.sidebar:
             st.session_state.menu = "HOME"
             st.rerun()
         if st.button("📝 경기 생성", use_container_width=True):
-            st.session_state.menu = "CREATE_MATCH"
+            go("CREATE_MATCH")
             st.rerun()
         if st.button("📋 경기 목록", use_container_width=True):
-            st.session_state.menu = "MATCH_LIST"
+            go("MATCH_LIST")
             st.rerun()
         if st.button("📍 전국 구장 지도", use_container_width=True):
-            st.session_state.menu = "COURSE_MAP"
+            go("COURSE_MAP")
             st.rerun()
         if st.button("🎥 유튜브", use_container_width=True):
-            st.session_state.menu = "YOUTUBE"
+            go("YOUTUBE")
             st.rerun()
-        if st.button("📈 관리자 KPI", use_container_width=True):
-            st.session_state.menu = "ADMIN_KPI"
-            st.rerun()
-        if st.button("🏅 누적 랭킹", use_container_width=True):
-            st.session_state.menu = "RANKING"
+        if st.button("🏅 구장별 랭킹", use_container_width=True):
+            go("RANKING")
             st.rerun()
 
+        if is_admin():
+            if st.button("📈 관리자 KPI", use_container_width=True):
+                go("ADMIN_KPI")
+                st.rerun()
+
+        st.divider()
+        st.markdown("### 시트 연동 상태")
+        if st.session_state.api_logs:
+            latest = st.session_state.api_logs[0]
+            st.write(f"최근 요청: `{latest['action']}`")
+            st.write(f"상태: `{latest['status']}`")
+        else:
+            st.caption("아직 시트 전송 기록이 없습니다.")
+
+        with st.expander("최근 전송 로그 보기"):
+            if st.session_state.api_logs:
+                for log in st.session_state.api_logs:
+                    st.write(f"[{log['time']}] {log['action']} / {log['status']}")
+                    st.caption(log["detail"])
+            else:
+                st.caption("기록 없음")
+
 # =========================================================
-# 9. 로그인 전 화면
+# 9. 로그인 전 첫 화면
 # =========================================================
 if not st.session_state.logged_in:
-    st.markdown("<div class='title-main'>⛳ PARKDA 파크골프 통합관제플랫폼</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-main'>경기 생성 · 자동 조편성 · 9홀/18홀 스코어 · 결과 공유 · KPI 대시보드</div>", unsafe_allow_html=True)
-    st.write("")
-    st.info("왼쪽 사이드바에서 로그인 후 이용해주세요.")
+    render_feature_teaser()
     st.stop()
 
 # =========================================================
 # 10. HOME
 # =========================================================
 if st.session_state.menu == "HOME":
+    render_topbar("⛳ PARKDA 통합관제 대시보드", "경기 운영 · 조편성 · 스코어 · 지도 · 유튜브 · 구장별 랭킹")
     kpi = get_match_kpis()
-    st.markdown("<div class='title-main'>⛳ PARKDA 통합관제 대시보드</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-main'>MVP 2차: 경기 운영 + 누적 데이터 + 관리자 KPI</div>", unsafe_allow_html=True)
-    st.write("")
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -482,18 +931,27 @@ if st.session_state.menu == "HOME":
         st.markdown(f"<div class='kpi-card'><h4>회원 수</h4><h2>{len(st.session_state.users)}</h2></div>", unsafe_allow_html=True)
 
     st.write("")
-    q1, q2, q3, q4 = st.columns(4)
-    with q1:
-        st.button("📝 경기 생성", use_container_width=True, on_click=lambda: st.session_state.update(menu="CREATE_MATCH"))
-    with q2:
-        st.button("📋 경기 목록", use_container_width=True, on_click=lambda: st.session_state.update(menu="MATCH_LIST"))
-    with q3:
-        st.button("📈 관리자 KPI", use_container_width=True, on_click=lambda: st.session_state.update(menu="ADMIN_KPI"))
-    with q4:
-        st.button("🏅 누적 랭킹", use_container_width=True, on_click=lambda: st.session_state.update(menu="RANKING"))
+    quick_cols = st.columns(4)
+    with quick_cols[0]:
+        if st.button("📝 경기 생성", use_container_width=True):
+            go("CREATE_MATCH")
+            st.rerun()
+    with quick_cols[1]:
+        if st.button("📋 경기 목록", use_container_width=True):
+            go("MATCH_LIST")
+            st.rerun()
+    with quick_cols[2]:
+        if st.button("📍 전국 구장 지도", use_container_width=True):
+            go("COURSE_MAP")
+            st.rerun()
+    with quick_cols[3]:
+        if st.button("🏅 구장별 랭킹", use_container_width=True):
+            go("RANKING")
+            st.rerun()
 
     st.write("")
     left, right = st.columns([1.2, 1])
+
     with left:
         st.subheader("최근 생성 경기")
         recent_matches = list(st.session_state.matches.values())[-5:][::-1]
@@ -512,24 +970,23 @@ if st.session_state.menu == "HOME":
                 )
 
     with right:
-        st.subheader("빠른 현황")
-        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
-        st.write(f"- 9홀 경기 수: {kpi['nine_hole_matches']}")
-        st.write(f"- 18홀 경기 수: {kpi['eighteen_hole_matches']}")
-        top_courses = get_course_stats().head(3)
-        if top_courses.empty:
-            st.caption("아직 구장 통계가 없습니다.")
-        else:
-            st.write("**인기 구장 TOP 3**")
-            for _, row in top_courses.iterrows():
-                st.write(f"- {row['구장']} / 경기 {row['경기수']}회 / 참가 {row['참가자수']}명")
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.subheader("바로 할 수 있는 기능")
+        st.markdown("""
+        <div class='section-card'>
+            <p>• 경기 생성 후 자동 조편성</p>
+            <p>• 조편성 전체복사 후 카톡/밴드 공유</p>
+            <p>• PAR 기준 + / - 스코어 입력</p>
+            <p>• 구장별 누적 랭킹 조회</p>
+            <p>• 카테고리별 유튜브 학습</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 # =========================================================
 # 11. 경기 생성
 # =========================================================
 elif st.session_state.menu == "CREATE_MATCH":
-    st.title("📝 경기 생성")
+    render_topbar("📝 경기 생성", "경기 생성이 완료되면 조편성 결과를 바로 전체복사할 수 있습니다.")
+
     with st.form("create_match_form"):
         col1, col2 = st.columns(2)
         with col1:
@@ -553,7 +1010,7 @@ elif st.session_state.menu == "CREATE_MATCH":
         if not title.strip():
             st.error("경기명을 입력해주세요.")
         elif len(players) < 2:
-            st.error("참가자는 최소 2명 이상 입력해주세요. 이름은 줄바꿈/쉼표로 구분해주세요.")
+            st.error("참가자는 최소 2명 이상 입력해주세요.")
         else:
             groups = generate_groups(players, group_size)
             starts = assign_start_holes(len(groups), hole_count)
@@ -566,7 +1023,7 @@ elif st.session_state.menu == "CREATE_MATCH":
                 })
 
             match_id = str(uuid.uuid4())[:8]
-            score_df = build_empty_score_df(players, hole_count)
+            score_df = build_par_score_df(players, PAR_9_DEFAULT if hole_count == 9 else PAR_18_DEFAULT)
 
             st.session_state.matches[match_id] = {
                 "id": match_id,
@@ -582,6 +1039,14 @@ elif st.session_state.menu == "CREATE_MATCH":
                 "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "par_list": PAR_9_DEFAULT if hole_count == 9 else PAR_18_DEFAULT,
             }
+
+            # score_ui도 초기화
+            ui_key = f"score_{match_id}"
+            st.session_state.score_ui[ui_key] = {
+                player: {f"{i}홀": (PAR_9_DEFAULT if hole_count == 9 else PAR_18_DEFAULT)[i-1] for i in range(1, hole_count+1)}
+                for player in players
+            }
+
             st.session_state.current_match_id = match_id
             persist_all()
 
@@ -617,8 +1082,8 @@ elif st.session_state.menu == "CREATE_MATCH":
 
     current_id = st.session_state.current_match_id
     if current_id and current_id in st.session_state.matches:
-        st.subheader("생성된 조편성 미리보기")
         match = st.session_state.matches[current_id]
+        st.subheader("생성된 조편성")
         for g in match["groups"]:
             st.markdown(
                 f"""
@@ -629,49 +1094,77 @@ elif st.session_state.menu == "CREATE_MATCH":
                 """,
                 unsafe_allow_html=True
             )
-        if st.button("이 경기 스코어 입력하러 가기", use_container_width=True):
-            st.session_state.menu = f"SCORE_{current_id}"
-            st.rerun()
+
+        share_text = build_group_share_text(match)
+        st.subheader("조편성 전체복사")
+        copy_widget(share_text, key=f"group_copy_{current_id}", height=200)
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("📋 경기목록으로", use_container_width=True):
+                go("MATCH_LIST")
+                st.rerun()
+        with c2:
+            if st.button("📝 이 경기 스코어 입력", use_container_width=True):
+                go(f"SCORE_{current_id}")
+                st.rerun()
 
 # =========================================================
 # 12. 경기 목록
 # =========================================================
 elif st.session_state.menu == "MATCH_LIST":
-    st.title("📋 경기 목록")
+    render_topbar("📋 경기 목록", "경기 검색, 스코어 입력, 결과 확인, 조편성 공유")
     if not st.session_state.matches:
         st.info("생성된 경기가 없습니다.")
     else:
-        search = st.text_input("경기명 검색", placeholder="예: 김해")
+        search = st.text_input("경기명/구장명 검색", placeholder="예: 김해")
         all_matches = list(st.session_state.matches.values())[::-1]
         if search.strip():
             all_matches = [m for m in all_matches if search.strip() in m["title"] or search.strip() in m["course_name"]]
 
         for match in all_matches:
             mid = match["id"]
-            col1, col2, col3 = st.columns([6, 2, 2])
-            with col1:
-                st.markdown(
-                    f"""
-                    <div class='match-card'>
-                        <b>{match['title']}</b><br>
-                        경기일: {match['match_date']} / 구장: {match['course_name']} / 홀수: {match['hole_count']}홀 / 참가자: {len(match['players'])}명
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            with col2:
-                if st.button(f"스코어 입력 {mid}", key=f"score_{mid}", use_container_width=True):
+            st.markdown(
+                f"""
+                <div class='match-card'>
+                    <b>{match['title']}</b><br>
+                    경기일: {match['match_date']} / 구장: {match['course_name']} / 홀수: {match['hole_count']}홀 / 참가자: {len(match['players'])}명
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                if st.button(f"✏ 스코어 입력", key=f"score_{mid}", use_container_width=True):
                     st.session_state.current_match_id = mid
-                    st.session_state.menu = f"SCORE_{mid}"
+                    go(f"SCORE_{mid}")
                     st.rerun()
-            with col3:
-                if st.button(f"결과 보기 {mid}", key=f"result_{mid}", use_container_width=True):
+            with c2:
+                if st.button(f"📊 결과 보기", key=f"result_{mid}", use_container_width=True):
                     st.session_state.current_match_id = mid
-                    st.session_state.menu = f"RESULT_{mid}"
+                    go(f"RESULT_{mid}")
+                    st.rerun()
+            with c3:
+                if st.button(f"📋 조편성 복사", key=f"copy_{mid}", use_container_width=True):
+                    st.session_state.current_match_id = mid
+                    st.session_state.menu = f"COPY_{mid}"
                     st.rerun()
 
 # =========================================================
-# 13. SCORE
+# 13. 조편성 복사 전용
+# =========================================================
+elif st.session_state.menu.startswith("COPY_"):
+    match_id = st.session_state.menu.replace("COPY_", "")
+    match = st.session_state.matches.get(match_id)
+    if not match:
+        st.error("경기 정보를 찾을 수 없습니다.")
+    else:
+        render_topbar("📋 조편성 공유", f"{match['title']} / {match['course_name']}")
+        share_text = build_group_share_text(match)
+        copy_widget(share_text, key=f"group_copy_page_{match_id}", height=220)
+
+# =========================================================
+# 14. SCORE
 # =========================================================
 elif st.session_state.menu.startswith("SCORE_"):
     match_id = st.session_state.menu.replace("SCORE_", "")
@@ -679,40 +1172,61 @@ elif st.session_state.menu.startswith("SCORE_"):
     if not match:
         st.error("경기 정보를 찾을 수 없습니다.")
     else:
-        st.title(f"📋 스코어 입력 - {match['title']}")
-        st.caption(f"{match['match_date']} | {match['course_name']} | {match['hole_count']}홀 | 참가자 {len(match['players'])}명")
+        render_topbar(
+            f"📋 스코어 입력 - {match['title']}",
+            f"{match['match_date']} | {match['course_name']} | {match['hole_count']}홀 | 참가자 {len(match['players'])}명"
+        )
 
-        st.subheader("조편성")
-        for g in match["groups"]:
-            st.markdown(
-                f"""
-                <div class='match-card'>
-                    <b>{g['group_no']}조</b> | 시작홀: {g['start_hole']}홀<br>
-                    참가자: {", ".join(g['players'])}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+        score_map = ensure_score_ui(match_id, match)
+        player_tabs = st.tabs(match["players"])
 
-        st.subheader("PAR 정보")
-        par_df = pd.DataFrame({
-            "홀": [f"{i}홀" for i in range(1, match["hole_count"] + 1)],
-            "PAR": match["par_list"]
-        })
-        st.dataframe(par_df, use_container_width=True, hide_index=True)
+        for idx, player in enumerate(match["players"]):
+            with player_tabs[idx]:
+                st.markdown(f"### {player}")
+                hole_cols = st.columns(3 if match["hole_count"] == 9 else 4)
+                for i in range(1, match["hole_count"] + 1):
+                    col = hole_cols[(i - 1) % len(hole_cols)]
+                    with col:
+                        hole_key = f"{i}홀"
+                        current_score = int(score_map[player][hole_key])
+                        par_value = match["par_list"][i - 1]
 
-        score_df = records_to_df(match["score_df"])
-        edited_df = st.data_editor(score_df, use_container_width=True, num_rows="fixed", key=f"editor_{match_id}")
+                        st.markdown(
+                            f"""
+                            <div class='score-hole-card'>
+                                <div><b>{i}홀</b></div>
+                                <div class='par-badge'>PAR {par_value}</div>
+                                <div class='score-value'>{current_score}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+
+                        m1, m2 = st.columns(2)
+                        with m1:
+                            if st.button("－", key=f"minus_{match_id}_{player}_{i}", use_container_width=True):
+                                score_map[player][hole_key] = max(1, current_score - 1)
+                                st.rerun()
+                        with m2:
+                            if st.button("＋", key=f"plus_{match_id}_{player}_{i}", use_container_width=True):
+                                score_map[player][hole_key] = current_score + 1
+                                st.rerun()
+
+        st.write("")
+        preview_df = score_ui_to_df(match_id, match)
+        result_preview = compute_score_result(preview_df, match["hole_count"])
+        st.subheader("현재 점수 미리보기")
+        st.dataframe(result_preview, use_container_width=True, hide_index=True)
 
         c1, c2 = st.columns(2)
         with c1:
             if st.button("💾 스코어 저장", use_container_width=True):
-                st.session_state.matches[match_id]["score_df"] = df_to_records(edited_df)
+                final_df = score_ui_to_df(match_id, match)
+                st.session_state.matches[match_id]["score_df"] = df_to_records(final_df)
                 persist_all()
 
-                result_df = compute_score_result(edited_df, match["hole_count"])
+                result_df = compute_score_result(final_df, match["hole_count"])
                 hole_cols = [f"{i}홀" for i in range(1, match["hole_count"] + 1)]
-
                 score_rows = []
                 for _, row in result_df.iterrows():
                     score_rows.append({
@@ -734,15 +1248,14 @@ elif st.session_state.menu.startswith("SCORE_"):
                 })
 
                 st.success("스코어가 저장되었습니다.")
-
         with c2:
-            if st.button("📊 결과 보기", use_container_width=True):
-                st.session_state.matches[match_id]["score_df"] = df_to_records(edited_df)
+            if st.button("📊 저장 후 결과 보기", use_container_width=True):
+                final_df = score_ui_to_df(match_id, match)
+                st.session_state.matches[match_id]["score_df"] = df_to_records(final_df)
                 persist_all()
 
-                result_df = compute_score_result(edited_df, match["hole_count"])
+                result_df = compute_score_result(final_df, match["hole_count"])
                 hole_cols = [f"{i}홀" for i in range(1, match["hole_count"] + 1)]
-
                 score_rows = []
                 for _, row in result_df.iterrows():
                     score_rows.append({
@@ -763,11 +1276,11 @@ elif st.session_state.menu.startswith("SCORE_"):
                     "memo": "결과보기 진입 시 저장"
                 })
 
-                st.session_state.menu = f"RESULT_{match_id}"
+                go(f"RESULT_{match_id}")
                 st.rerun()
 
 # =========================================================
-# 14. RESULT
+# 15. RESULT
 # =========================================================
 elif st.session_state.menu.startswith("RESULT_"):
     match_id = st.session_state.menu.replace("RESULT_", "")
@@ -775,8 +1288,11 @@ elif st.session_state.menu.startswith("RESULT_"):
     if not match:
         st.error("결과 정보를 찾을 수 없습니다.")
     else:
-        st.title(f"📊 경기 결과 - {match['title']}")
-        st.caption(f"{match['match_date']} | {match['course_name']} | {match['hole_count']}홀 | 주최자: {match['organizer']}")
+        render_topbar(
+            f"📊 경기 결과 - {match['title']}",
+            f"{match['match_date']} | {match['course_name']} | {match['hole_count']}홀 | 주최자: {match['organizer']}"
+        )
+
         score_df = records_to_df(match["score_df"])
         result_df = compute_score_result(score_df, match["hole_count"])
 
@@ -795,139 +1311,141 @@ elif st.session_state.menu.startswith("RESULT_"):
         st.dataframe(result_df, use_container_width=True, hide_index=True)
 
         share_text = build_share_text(match, result_df)
-        st.subheader("카톡 공유용 텍스트")
-        st.text_area("복사해서 사용하세요", value=share_text, height=220)
-
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("✏️ 다시 스코어 수정", use_container_width=True):
-                st.session_state.menu = f"SCORE_{match_id}"
-                st.rerun()
-        with c2:
-            if st.button("🏠 HOME", use_container_width=True):
-                st.session_state.menu = "HOME"
-                st.rerun()
+        st.subheader("결과 공유")
+        copy_widget(share_text, key=f"result_copy_{match_id}", height=220)
 
 # =========================================================
-# 15. 구장 지도
+# 16. 구장 지도
 # =========================================================
 elif st.session_state.menu == "COURSE_MAP":
-    st.title("📍 전국 구장 지도")
+    render_topbar("📍 전국 구장 지도", "지역별 구장 탐색 / 카카오맵 가능 시 카카오맵 우선")
     region_filter = st.selectbox("지역 선택", ["전체"] + sorted(list(set(c["region"] for c in COURSES))))
     filtered = COURSES if region_filter == "전체" else [c for c in COURSES if c["region"] == region_filter]
-
-    if filtered:
-        center_lat = sum(c["lat"] for c in filtered) / len(filtered)
-        center_lon = sum(c["lon"] for c in filtered) / len(filtered)
-    else:
-        center_lat, center_lon = 36.5, 127.8
-
-    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=7)
-    for c in filtered:
-        popup_html = f"""
-        <b>{c['name']}</b><br>
-        지역: {c['region']}<br>
-        주소: {c['address']}<br>
-        홀수: {c['holes']}홀<br>
-        이용료: {c['fee']}<br>
-        전화: {c['phone']}
-        """
-        folium.Marker([c["lat"], c["lon"]], popup=popup_html, tooltip=c["name"]).add_to(fmap)
-    st_folium(fmap, width=1200, height=500)
+    render_map(filtered)
     st.dataframe(pd.DataFrame(filtered), use_container_width=True, hide_index=True)
 
 # =========================================================
-# 16. 유튜브
+# 17. 유튜브
 # =========================================================
 elif st.session_state.menu == "YOUTUBE":
-    st.title("🎥 파크골프 유튜브")
-    st.caption("현재는 링크형 연결입니다. 추후 YouTube API 기반 썸네일/최신영상 자동화 가능")
-    for item in YOUTUBE_CHANNELS:
-        st.markdown(
-            f"""
-            <div class='match-card'>
-                <b>{item['title']}</b><br>
-                <a href="{item['url']}" target="_blank">{item['url']}</a>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    render_topbar("🎥 파크골프 유튜브", "레슨영상 / 대회영상 / 구장소개를 카테고리별로 확인")
+    categories = list(YOUTUBE_VIDEOS.keys())
+    cat = st.radio("카테고리 선택", categories, horizontal=True)
+
+    videos = YOUTUBE_VIDEOS.get(cat, [])
+    cols = st.columns(2)
+    for i, item in enumerate(videos):
+        with cols[i % 2]:
+            thumb = youtube_thumbnail(item["url"])
+            st.markdown("<div class='yt-card'>", unsafe_allow_html=True)
+            if thumb:
+                st.image(thumb, use_container_width=True)
+            st.markdown(f"<div class='yt-title'>{item['title']}</div>", unsafe_allow_html=True)
+            st.link_button("영상 보러가기", item["url"], use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
 # =========================================================
-# 17. 관리자 KPI
+# 18. 관리자 KPI
 # =========================================================
 elif st.session_state.menu == "ADMIN_KPI":
-    st.title("📈 관리자 KPI 대시보드")
-    kpi = get_match_kpis()
-    player_stats = get_player_stats()
-    course_stats = get_course_stats()
+    if not is_admin():
+        st.error("관리자만 접근할 수 있습니다.")
+        if st.button("홈으로"):
+            st.session_state.menu = "HOME"
+            st.rerun()
+    else:
+        render_topbar("📈 관리자 KPI 대시보드", "관리자는 전화번호 기준으로 지정됩니다. 주최자와 관리자는 별개입니다.")
+        kpi = get_match_kpis()
+        player_stats = get_player_stats()
+        course_stats = get_course_stats()
 
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.metric("전체 경기 수", kpi["total_matches"])
-    with c2:
-        st.metric("누적 참가자 수", kpi["total_players"])
-    with c3:
-        st.metric("스코어 저장 경기", kpi["score_saved_matches"])
-    with c4:
-        st.metric("누적 회원 수", len(st.session_state.users))
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric("전체 경기 수", kpi["total_matches"])
+        with c2:
+            st.metric("누적 참가자 수", kpi["total_players"])
+        with c3:
+            st.metric("스코어 저장 경기", kpi["score_saved_matches"])
+        with c4:
+            st.metric("누적 회원 수", len(st.session_state.users))
 
-    st.write("")
-    a, b = st.columns(2)
-    with a:
-        st.subheader("홀수별 경기 비중")
-        hole_df = pd.DataFrame({
-            "홀수": ["9홀", "18홀"],
-            "경기수": [kpi["nine_hole_matches"], kpi["eighteen_hole_matches"]]
-        })
-        st.bar_chart(hole_df.set_index("홀수"))
+        a, b = st.columns(2)
+        with a:
+            st.subheader("홀수별 경기 비중")
+            hole_df = pd.DataFrame({
+                "홀수": ["9홀", "18홀"],
+                "경기수": [kpi["nine_hole_matches"], kpi["eighteen_hole_matches"]]
+            })
+            st.bar_chart(hole_df.set_index("홀수"))
 
-    with b:
-        st.subheader("인기 구장 현황")
-        if course_stats.empty:
-            st.caption("아직 통계가 없습니다.")
+        with b:
+            st.subheader("인기 구장 현황")
+            if course_stats.empty:
+                st.caption("아직 통계가 없습니다.")
+            else:
+                st.dataframe(course_stats, use_container_width=True, hide_index=True)
+
+        st.subheader("회원 현황")
+        user_rows = []
+        for u in st.session_state.users.values():
+            user_rows.append({
+                "이름": u["name"],
+                "전화": u["phone"],
+                "가입일": u.get("joined_at", ""),
+                "최근로그인": u.get("last_login", ""),
+                "로그인횟수": u.get("login_count", 0),
+            })
+        if user_rows:
+            st.dataframe(pd.DataFrame(user_rows), use_container_width=True, hide_index=True)
         else:
-            st.dataframe(course_stats, use_container_width=True, hide_index=True)
+            st.caption("회원 데이터가 없습니다.")
 
-    st.subheader("회원 현황")
-    user_rows = []
-    for u in st.session_state.users.values():
-        user_rows.append({
-            "이름": u["name"],
-            "전화": u["phone"],
-            "가입일": u.get("joined_at", ""),
-            "최근로그인": u.get("last_login", ""),
-            "로그인횟수": u.get("login_count", 0),
-        })
-    if user_rows:
-        st.dataframe(pd.DataFrame(user_rows), use_container_width=True, hide_index=True)
-    else:
-        st.caption("회원 데이터가 없습니다.")
+        st.subheader("시트 연동 로그")
+        if st.session_state.api_logs:
+            st.dataframe(pd.DataFrame(st.session_state.api_logs), use_container_width=True, hide_index=True)
+        else:
+            st.caption("아직 시트 전송 로그가 없습니다.")
 
-    st.subheader("선수 누적 성적 TOP 10")
-    if player_stats.empty:
-        st.caption("아직 스코어 데이터가 없습니다.")
-    else:
-        st.dataframe(player_stats.head(10), use_container_width=True, hide_index=True)
+        st.subheader("누적 성적 TOP 10")
+        if player_stats.empty:
+            st.caption("아직 스코어 데이터가 없습니다.")
+        else:
+            st.dataframe(player_stats.head(10), use_container_width=True, hide_index=True)
 
 # =========================================================
-# 18. 누적 랭킹
+# 19. 구장별 누적 랭킹
 # =========================================================
 elif st.session_state.menu == "RANKING":
-    st.title("🏅 누적 랭킹")
-    player_stats = get_player_stats()
-    if player_stats.empty:
-        st.info("누적 랭킹을 계산할 스코어 데이터가 없습니다.")
+    render_topbar("🏅 구장별 누적 랭킹", "전체가 아니라 구장별 기준으로 랭킹을 봅니다.")
+    course_names = sorted(list(set([m["course_name"] for m in st.session_state.matches.values()])))
+    if not course_names:
+        st.info("랭킹을 계산할 경기 데이터가 없습니다.")
     else:
-        sort_option = st.selectbox("정렬 기준", ["경기수", "평균타수", "최고성적"])
-        ascending = True if sort_option in ["평균타수", "최고성적"] else False
-        ranking_df = player_stats.sort_values(by=[sort_option], ascending=ascending).reset_index(drop=True)
-        ranking_df.index = ranking_df.index + 1
-        ranking_df = ranking_df.reset_index().rename(columns={"index": "랭킹"})
-        st.dataframe(ranking_df, use_container_width=True, hide_index=True)
+        selected_course = st.selectbox("구장 선택", course_names)
+        player_stats = get_player_stats(course_filter=selected_course)
+
+        if player_stats.empty:
+            st.info("선택한 구장의 스코어 데이터가 없습니다.")
+        else:
+            sort_option = st.selectbox("정렬 기준", ["경기수", "평균타수", "최고성적"])
+            ascending = True if sort_option in ["평균타수", "최고성적"] else False
+            ranking_df = player_stats[player_stats["구장"] == selected_course].sort_values(
+                by=[sort_option],
+                ascending=ascending
+            ).reset_index(drop=True)
+            ranking_df.index = ranking_df.index + 1
+            ranking_df = ranking_df.reset_index().rename(columns={"index": "랭킹"})
+            st.dataframe(ranking_df, use_container_width=True, hide_index=True)
+
+            share_lines = [f"🏅 [{selected_course}] 누적 랭킹"]
+            for _, row in ranking_df.head(10).iterrows():
+                share_lines.append(
+                    f"{row['랭킹']}위 {row['선수명']} / 경기 {row['경기수']}회 / 평균 {row['평균타수']}타 / 최고성적 {row['최고성적']}위"
+                )
+            copy_widget("\n".join(share_lines), key=f"rank_copy_{selected_course}", height=220)
 
 # =========================================================
-# 19. fallback
+# 20. fallback
 # =========================================================
 else:
     st.session_state.menu = "HOME"
